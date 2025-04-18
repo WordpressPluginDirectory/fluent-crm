@@ -20,6 +20,33 @@ class ImporterController extends Controller
 {
     public function getDrivers()
     {
+        /**
+         * Determine the list of contact import providers for FluentCRM.
+         *
+         * This filter allows you to modify the list of available import providers
+         * in the FluentCRM plugin. By default, it includes CSV File and WordPress Users.
+         *
+         * @since 2.7.0
+         *
+         * @param array {
+         *     An associative array of import providers.
+         *
+         *     @type array csv {
+         *         Details for the CSV File import provider.
+         *
+         *         @type string $label    The label for the provider.
+         *         @type string $logo     The URL to the provider's logo.
+         *         @type bool   $disabled Whether the provider is disabled.
+         *     }
+         *     @type array users {
+         *         Details for the WordPress Users import provider.
+         *
+         *         @type string $label    The label for the provider.
+         *         @type string $logo     The URL to the provider's logo.
+         *         @type bool   $disabled Whether the provider is disabled.
+         *     }
+         * }
+         */
         $drivers = apply_filters('fluent_crm/import_providers', [
             'csv'   => [
                 'label'    => __('CSV File', 'fluent-crm'),
@@ -48,6 +75,16 @@ class ImporterController extends Controller
             return $this->processUserDriver($request);
         }
 
+        /**
+         * Determine the import driver response (CSV).
+         *
+         * This filter allows modification of the import driver response based on the specified driver.
+         *
+         * @since 2.7.0
+         *
+         * @param bool   The response to be filtered or not. Default false.
+         * @param object $request  The request object containing import data.
+         */
         $response = apply_filters('fluent_crm/get_import_driver_' . $driver, false, $request);
 
         if (!$response || is_wp_error($response)) {
@@ -72,6 +109,18 @@ class ImporterController extends Controller
             return $this->processUserImport($config, $page);
         }
 
+        /**
+         * Determine the response after importing data using a specific driver (CSV).
+         *
+         * This filter allows you to modify the response after the import process
+         * using a specified driver.
+         *
+         * @since 2.7.0
+         *
+         * @param bool   The response to be filtered or not. Default false.
+         * @param array  $config   The configuration array for the import process.
+         * @param int    $page     The current page number being processed.
+         */
         $response = apply_filters('fluent_crm/post_import_driver_' . $driver, false, $config, $page);
 
         if (!$response || is_wp_error($response)) {
@@ -166,7 +215,7 @@ class ImporterController extends Controller
         foreach ($users as $user) {
             $subscriber = Helper::getWPMapUserInfo($user);
             $subscriber['source'] = 'wp_users';
-            if ($subscriber['email']) {
+            if (isset($subscriber['email']) && $subscriber['email']) {
                 $subscribers[] = $subscriber;
             }
         }
@@ -190,6 +239,15 @@ class ImporterController extends Controller
         ]);
 
 
+        /**
+         * Determine the number of subscribers to process per request while importing.
+         *
+         * This filter allows you to modify the number of subscribers that are processed in each request.
+         *
+         * @since 2.7.0
+         * 
+         * @param int $limit The number of subscribers to process per request. Default is 100.
+         */
         $limit = apply_filters('fluent_crm/process_subscribers_per_request', 100);
 
         $userQuery = new \WP_User_Query([

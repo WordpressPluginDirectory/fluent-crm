@@ -86,6 +86,8 @@ class Webhook
                     $newStatus = 'bounced';
                 } else if ($eventName == 'unsubscribe') {
                     $newStatus = 'unsubscribed';
+                } else if ($eventName == 'spamreport') {
+                    $newStatus = 'spammed';
                 }
                 $unsubscribeData = [
                     'email'  => Arr::get($event, 'email'),
@@ -122,8 +124,10 @@ class Webhook
             $eventName = Arr::get($event, 'EVENT');
             if (in_array($eventName, ['bounced', 'invalid', 'spam', 'unsubscribed'])) {
                 $newStatus = 'bounced';
-                if ($eventName == 'unsubscribed' || $eventName == 'spam') {
+                if ($eventName == 'unsubscribed') {
                     $newStatus = 'complained';
+                } else if ($eventName == 'spam') {
+                    $newStatus = 'spammed';
                 }
                 $reason = $newStatus . __(' status was set from SendGrid Webhook API. Reason: ', 'fluent-crm') . Arr::get($event, 'BOUNCE_TYPE') . __('. Recorded at: ', 'fluent-crm') . current_time('mysql');
 
@@ -175,8 +179,10 @@ class Webhook
             $eventName = Arr::get($event, 'type');
             if (in_array($eventName, ['bounce', 'spam_complaint', 'link_unsubscribe'])) {
                 $newStatus = 'bounced';
-                if ($eventName == 'spam_complaint' || $eventName == 'link_unsubscribe') {
+                if ($eventName == 'link_unsubscribe') {
                     $newStatus = 'complained';
+                } else if ($eventName == 'spam_complaint') {
+                    $newStatus = 'spammed';
                 }
                 $reason = $newStatus . __(' status was set from Sparkpost Webhook API. Reason: ', 'fluent-crm') . $eventName . __('. Recorded at: ', 'fluent-crm') . current_time('mysql');
 
@@ -221,7 +227,7 @@ class Webhook
         if (in_array($eventName, ['Bounce', 'SpamComplaint'])) {
             $newStatus = 'bounced';
             if ($eventName == 'SpamComplaint') {
-                $newStatus = 'complained';
+                $newStatus = 'spammed';
             }
 
             $reason = $newStatus . __(' status was set from PostMark Webhook API. Reason: ', 'fluent-crm') . $eventName . __('. Recorded at: ', 'fluent-crm') . current_time('mysql');
@@ -381,13 +387,58 @@ class Webhook
             return false;
         }
 
+        $newStatus = 'bounced';
+        if ($event == 'unsubscribe') {
+            $newStatus = 'unsubscribed';
+        } else if ($event == 'spam') {
+            $newStatus = 'spammed';
+        }
+
         $unsubscribeData = [
             'email'  => $toEmail,
             'reason' => $reason,
-            'status' => ($event == 'unsubscribe') ? 'unsubscribed' : 'bounced',
+            'status' => $newStatus,
             'unsubscribe_reason' => $reason
         ];
 
         return (new ExternalPages())->recordUnsubscribe($unsubscribeData);
+    }
+
+    /**
+     * @param $request \FluentCrm\Framework\Request\Request
+     * @return boolean
+     */
+    private function handleBrevo($request)
+    {
+        $event = $request->getJson();
+
+        if (!$event || !count($event)) {
+            return false;
+        }
+
+        $unsubscribeData = [];
+        
+        $eventName = Arr::get($event, 'event');
+        if (in_array($eventName, ['soft_bounce', 'hard_bounce', 'spam', 'error', 'blocked', 'unsubscribe'])) {
+            $newStatus = 'complained';
+            if (in_array($eventName, ['soft_bounce', 'hard_bounce'])) {
+                $newStatus = 'bounced';
+            } else if ($eventName == 'unsubscribe') {
+                $newStatus = 'unsubscribed';
+            } else if ($eventName == 'spam') {
+                $newStatus = 'spammed';
+            }
+            $unsubscribeData = [
+                'email'  => Arr::get($event, 'email'),
+                'reason' => $newStatus . __(' status was set from Brevo Webhook API. Reason: ', 'fluent-crm') . Arr::get($event, 'reason', 'unknown') . __('. Recorded at: ', 'fluent-crm') . current_time('mysql'),
+                'status' => $newStatus
+            ];
+        }
+
+        if ($unsubscribeData) {
+            return (new ExternalPages())->recordUnsubscribe($unsubscribeData);
+        }
+
+        return false;
     }
 }

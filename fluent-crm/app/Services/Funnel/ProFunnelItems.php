@@ -79,6 +79,14 @@ class ProFunnelItems
                 'description' => 'This funnel will start when a subscription payment fails',
                 'disabled'    => true
             ];
+
+            $triggers['woocommerce_subscription_status_cancelled'] = [
+                'category'    => 'WooCommerce',
+                'label'       => 'WooCommerce Subscription Cancelled',
+                'icon'        => 'fc-icon-woo_refund',
+                'description' => 'This funnel will start when a WooCommerce subscription is cancelled.',
+                'disabled'    => true
+            ];
         }
 
         if (defined('WLM3_PLUGIN_VERSION')) {

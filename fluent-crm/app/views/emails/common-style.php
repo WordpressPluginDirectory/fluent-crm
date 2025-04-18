@@ -1,6 +1,6 @@
 <?php
 $width       = $config['content_width'];
-$hFont       = $config['heading_font_family'];
+$hFont       = $config['headings_font_family'];
 $hColor      = $config['headings_color'];
 $mainColor   = $config['text_color'];
 $linkColor   = $config['link_color'];
@@ -52,6 +52,12 @@ if(fluentcrm_is_rtl()) {
         <?php endif; ?>
         padding-left: <?php echo esc_attr($contentPadding); ?>px !important;
         padding-right: <?php echo esc_attr($contentPadding); ?>px !important;
+    }
+    .fc_email_body *,
+    .fc_email_body *:after,
+    .fc_email_body *:before,
+    .fc_email_body {
+        box-sizing: border-box;
     }
 
     #templateFooter .fcTextContent, #templateFooter .fcTextContent p {
@@ -148,8 +154,26 @@ if(fluentcrm_is_rtl()) {
         padding: 0;
     }
 
-    .wp-block-table table {
+    .wp-block-table {
+        margin-left: 0;
+        margin-right: 0;
+    }
+    .wp-block-table.alignleft table {
+        margin-left: 0;
+        margin-right: auto;
+    }
+    .wp-block-table.alignright table {
+        margin-right: 0;
+        margin-left: auto;
+    }
+    .wp-block-table.aligncenter table {
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .wp-block-table table.has-fixed-layout {
         width: 100%;
+    }
+    .wp-block-table table {
         border: 1px solid #868686;
     }
 
@@ -194,10 +218,36 @@ if(fluentcrm_is_rtl()) {
 
     .fc_btn a {
         font-size: 16px;
+        font-size: inherit;
         text-decoration: none;
         border-radius: 0px;
         padding: 12px 18px;
         display: block;
+        line-height: 1.8;
+    }
+    .fc_btn.has-xx-large-font-size {
+        font-size: 2.15rem;
+    }
+    .fc_btn.has-x-large-font-size {
+        font-size: 1.75rem;
+    }
+    .fc_btn.has-large-font-size {
+        font-size: 1.38rem;
+    }
+    .fc_btn.has-extra-large-font-size {
+        font-size: 2.5rem;
+    }
+    .fc_btn.has-huge-font-size {
+        font-size: 6rem;
+    }
+    .fc_btn.has-gigantic-font-size {
+        font-size: 9rem;
+    }
+    .fc_btn.has-medium-font-size {
+        font-size: 1rem;
+    }
+    .fc_btn.has-small-font-size {
+        font-size: 0.875rem;
     }
 
     .fc_d_btn_bg.is-style-outline a {
@@ -466,7 +516,9 @@ if(fluentcrm_is_rtl()) {
         }
     <?php endif; ?>
 
-    table.wp-block-button__width-100, table.wp-block-button__width-75, table.wp-block-button__width-50 {
+    table.wp-block-button__width-100,
+    table.wp-block-button__width-75,
+    table.wp-block-button__width-50 {
         width: 100% !important;
     }
     .wp-block-button__width-100 table {
@@ -484,7 +536,24 @@ if(fluentcrm_is_rtl()) {
     .fc_btn_count_2.wp-block-button__width-50 table {
         width: 100%;
     }
+    .fce_buttons_row.is-content-justification-right table {
+        margin-left: auto;
+        margin-right: 0;
+    }
+    .fce_buttons_row table,
+    .fce_buttons_row.is-content-justification-left table {
+        margin-left: 0;
+        margin-right: auto;
+        float: none;
+    }
+    .fce_buttons_row.is-content-justification-center table {
+        margin-left: auto;
+        margin-right: auto;
+    }
 
+    .fc_column_content {
+        padding: 0;
+    }
 </style>
 
 
@@ -557,6 +626,18 @@ if(fluentcrm_is_rtl()) {
     .fc_latest_post_item {
         border:1px solid #edeef4;
     }
+    .fc_latest_post_item tbody tr td .fc_latest_post_overlay {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+    .fc_latest_post_item tbody tr td {
+        position: relative;
+    }
+    .fc_latest_post_item.layout-7 tbody tr td .fc_latest_post_overlay,
+    .fc_latest_post_item.default tbody tr td .fc_latest_post_overlay {
+        height: 350px;
+    }
     .fc_latest_post_item tbody tr td img {
         width: 100%;
         max-height: 400px;
@@ -579,6 +660,11 @@ if(fluentcrm_is_rtl()) {
     }
     .fc_latest_post_item.layout-6 .fc_latest_post_content .meta {
         margin: 0;
+    }
+    .fc_latest_post_item.layout-6 .fc_latest_post_overlay {
+        width: 100px;
+        height: 100px;
+        border-radius: 5px;
     }
     .fc_latest_post_item .fc_latest_post_content a {
         text-decoration: none;
@@ -614,6 +700,9 @@ if(fluentcrm_is_rtl()) {
     .fc_latest_post_item .fc_latest_post_content .meta .comments {
         display: block;
         margin-left: 15px;
+    }
+    .fc_latest_post_item.layout-3 tbody tr td .fc_latest_post_overlay {
+        height: 220px;
     }
     .fc_latest_post_item.layout-4 .fc_latest_post_content .description {
         margin: 0;
@@ -776,6 +865,26 @@ if(fluentcrm_is_rtl()) {
             display:block !important;
             flex-wrap: wrap;
         }
+        .fc_latest_post_item.layout-7 tbody tr td .fc_latest_post_overlay,
+        .fc_latest_post_item.default tbody tr td .fc_latest_post_overlay {
+            height: 200px;
+        }
+    }
+
+    /* woo table */
+    .fc-wp-woo-block-table .fc-woo-order-table {
+        width: 100%;
+    }
+    .fc-wp-woo-block-table .fc-woo-order-table tbody tr td .fc-woo-order-table-content {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .fc-wp-woo-block-table .fc-woo-order-table tbody tr td .fc-woo-order-table-content a {
+        color: #1B2533;
+    }
+    .fc-wp-woo-block-table .fc-woo-order-table tbody tr td .fc-woo-order-table-content .product-quantity {
+        flex: none;
     }
 
     @media only screen and (max-width: 480px) {

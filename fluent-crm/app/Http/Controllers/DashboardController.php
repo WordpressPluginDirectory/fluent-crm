@@ -47,10 +47,46 @@ class DashboardController extends Controller
             }
         }
 
+        /**
+         * Define the FluentCRM dashboard notices.
+         *
+         * This filter allows modification of the notices displayed on the FluentCRM dashboard.
+         *
+         * @since 2.8.40
+         *
+         * @param array $notices An array of notices to be displayed on the dashboard.
+         */
         $notices = apply_filters('fluent_crm/dashboard_notices', $notices);
 
+        /**
+         * Define the dashboard data for FluentCRM.
+         *
+         * @since 2.9.23
+         * 
+         * @param array {
+         *     The dashboard data array.
+         *
+         *     @type array $stats             Overall statistics.
+         *     @type array $sales             Sales statistics.
+         *     @type array $dashboard_notices Notices to be displayed on the dashboard.
+         *     @type array $onboarding        Onboarding statistics.
+         *     @type array $quick_links       Quick links for the dashboard.
+         *     @type array $ff_config         FluentForm configuration.
+         *     @type array $recommendation    Recommendations for the user.
+         *     @type array $system_tips       System tips for the user.
+         * }
+         */
         return apply_filters('fluent_crm/dashboard_data', [
             'stats'             => $overallStats,
+            /**
+             * Determine the FluentCRMsales statistics data.
+             *
+             * This filter allows modification of the sales statistics data before it is used.
+             *
+             * @since 2.7.0
+             *
+             * @param array An array of sales statistics data.
+             */
             'sales'             => apply_filters('fluent_crm/sales_stats', []),
             'dashboard_notices' => $notices,
             'onboarding'        => $stats->getOnboardingStat(),

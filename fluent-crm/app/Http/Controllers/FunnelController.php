@@ -8,10 +8,14 @@ use FluentCrm\App\Models\FunnelCampaign;
 use FluentCrm\App\Models\FunnelMetric;
 use FluentCrm\App\Models\FunnelSequence;
 use FluentCrm\App\Models\FunnelSubscriber;
+use FluentCrm\App\Models\Label;
+use FluentCrm\App\Models\Meta;
 use FluentCrm\App\Models\Subscriber;
+use FluentCrm\App\Models\TermRelation;
 use FluentCrm\App\Services\Funnel\FunnelHelper;
 use FluentCrm\App\Services\Funnel\ProFunnelItems;
 use FluentCrm\App\Services\Helper;
+use FluentCrm\App\Services\Libs\Parser\Parser;
 use FluentCrm\App\Services\Reporting;
 use FluentCrm\App\Services\Sanitize;
 use FluentCrm\Framework\Support\Arr;
@@ -36,15 +40,24 @@ class FunnelController extends Controller
         $orderBy = $request->getSafe('sort_by', 'id', 'sanitize_sql_orderby');
         $orderType = $request->getSafe('sort_type', 'DESC', 'sanitize_sql_orderby');
 
+        $labels = $request->getSafe('labels', [], 'intval');
+
         $funnelQuery = Funnel::orderBy($orderBy, $orderType);
         if ($search = $request->getSafe('search')) {
             $funnelQuery->where('title', 'LIKE', '%%' . $search . '%%');
         }
+
+        if (!empty($labels)) {
+            $funnelQuery->whereHas('labelsTerm', function ($query) use ($labels) {
+                $query->whereIn('term_id', $labels);
+            });
+        }
         $funnels = $funnelQuery->paginate();
         $with = $this->request->get('with', []);
-
         foreach ($funnels as $funnel) {
             $funnel->subscribers_count = $funnel->getSubscribersCount();
+            $funnel->description = $funnel->getMeta('description');
+            $funnel->labels = $funnel->getFormattedLabels();
         }
 
         $data = [
@@ -80,9 +93,22 @@ class FunnelController extends Controller
             $funnel->trigger = $triggers[$funnel->trigger_name];
         }
 
+        /**
+         * Determine the funnel editor details based on the funnel trigger name.
+         *
+         * The dynamic portion of the hook name, `$funnel->trigger_name`, refers to the trigger name of the funnel.
+         *
+         * @since 1.0.0
+         *
+         * @param object $funnel The funnel object containing the editor details.
+         */
         $funnel = apply_filters('fluentcrm_funnel_editor_details_' . $funnel->trigger_name, $funnel);
 
         $funnel->description = $funnel->getMeta('description');
+
+        if (!$funnel->settings) {
+            $funnel->settings = (object)[];
+        }
 
         $data = [
             'funnel' => $funnel
@@ -94,6 +120,17 @@ class FunnelController extends Controller
 
         if (in_array('block_fields', $with)) {
             $data['block_fields'] = $this->getBlockFields($funnel);
+            /**
+             * Determine the smart codes for a funnel based on the context.
+             *
+             * This filter allows modification of the context smart codes used in a funnel based on the funnel's trigger name.
+             *
+             * @since 2.5.7
+             *
+             * @param array  An array of context smart codes.
+             * @param string $funnel->trigger_name   The name of the funnel trigger.
+             * @param object $funnel                 The funnel object.
+             */
             $data['composer_context_codes'] = apply_filters('fluent_crm_funnel_context_smart_codes', [], $funnel->trigger_name, $funnel);
         }
 
@@ -148,6 +185,7 @@ class FunnelController extends Controller
     {
         $funnel = Funnel::findOrFail($funnelId);
         $funnel->deleteMeta('description');
+        $funnel->deleteMeta('funnel_label');
 
         Funnel::where('id', $funnelId)->delete();
         FunnelSequence::where('funnel_id', $funnelId)->delete();
@@ -189,6 +227,15 @@ class FunnelController extends Controller
         $funnel->conditions = [];
         $funnel->save();
 
+        /**
+         * Determine the funnel editor details based on the funnel's trigger name in FluentCRM.
+         *
+         * The dynamic portion of the hook name, `$funnel->trigger_name`, refers to the trigger name of the funnel.
+         *
+         * @since 2.3.1
+         *
+         * @param object $funnel The funnel object containing the editor details.
+         */
         $funnel = apply_filters('fluentcrm_funnel_editor_details_' . $funnel->trigger_name, $funnel);
 
         return $this->sendSuccess([
@@ -200,16 +247,45 @@ class FunnelController extends Controller
 
     private function getTriggers()
     {
+        /**
+         * Determine the list of funnel triggers in FluentCRM.
+         *
+         * This filter allows you to modify the array of funnel triggers.
+         *
+         * @since 1.0.0
+         *
+         * @param array An array of funnel triggers.
+         */
         return apply_filters('fluentcrm_funnel_triggers', []);
     }
 
     private function getBlocks($funnel)
     {
+        /**
+         * Determine the funnel blocks.
+         *
+         * This filter allows modification of the funnel blocks.
+         *
+         * @since 1.0.0
+         *
+         * @param array An array of funnel blocks.
+         * @param mixed $funnel The funnel object or data.
+         */
         return apply_filters('fluentcrm_funnel_blocks', [], $funnel);
     }
 
     private function getBlockFields($funnel)
     {
+        /**
+         * Determine the funnel block fields.
+         *
+         * This filter allows modification of the funnel block fields.
+         *
+         * @since 1.0.0
+         *
+         * @param array  The current funnel block fields.
+         * @param object $funnel The funnel object.
+         */
         return apply_filters('fluentcrm_funnel_block_fields', [], $funnel);
     }
 
@@ -446,7 +522,7 @@ class FunnelController extends Controller
 
         if ($funnel->status == $newStatus) {
             return $this->sendError([
-                'message' => 'Funnel already have the same status'
+                'message' => __('Funnel already have the same status', 'fluent-crm')
             ]);
         }
 
@@ -503,11 +579,19 @@ class FunnelController extends Controller
 
             foreach ($funnels as $funnel) {
                 $sequences = FunnelSequence::whereIn('funnel_id', $funnelIds)->get();
+
+                $labelIds = TermRelation::where('object_id', $funnel->id)
+                    ->where('object_type', Funnel::class)
+                    ->pluck('term_id');
+                $funnel->detachLabels($labelIds);
+
                 foreach ($sequences as $deletingSequence) {
                     do_action('fluentcrm_funnel_sequence_deleting_' . $deletingSequence->action_name, $deletingSequence, $funnel);
                     $deletingSequence->delete();
                 }
                 FunnelSubscriber::whereIn('funnel_id', $funnelIds)->delete();
+
+                $funnel->deleteMeta('funnel_label');
                 $funnel->delete();
             }
 
@@ -517,6 +601,27 @@ class FunnelController extends Controller
                 'message' => __('Selected Funnels has been deleted permanently', 'fluent-crm'),
             ]);
 
+        }
+
+        if ($actionName == 'apply_labels') {
+
+            $newLabels = $request->getSafe('labels', '');
+
+            if (!$newLabels) {
+                return $this->sendError([
+                    'message' => __('Please provide labels', 'fluent-crm')
+                ]);
+            }
+
+            $funnels = Funnel::whereIn('id', $funnelIds)->get();
+
+            foreach ($funnels as $funnel) {
+                $funnel->attachLabels($newLabels);
+            }
+
+            return $this->sendSuccess([
+                'message' => __('Labels has been applied successfully', 'fluent-crm'),
+            ]);
         }
 
         return $this->sendError([
@@ -536,8 +641,10 @@ class FunnelController extends Controller
             'settings'     => $oldFunnel->settings,
             'created_by'   => get_current_user_id()
         ];
+        $labelIds = $oldFunnel->getFormattedLabels()->pluck('id')->toArray();
 
         $funnel = Funnel::create($newFunnelData);
+        $funnel->attachLabels($labelIds);
 
         $sequences = FunnelHelper::getFunnelSequences($oldFunnel, true);
 
@@ -570,6 +677,18 @@ class FunnelController extends Controller
                 $cDelay += $delay;
             }
 
+            /**
+             * Determine the funnel sequence before saving.
+             *
+             * This filter allows modification of the funnel sequence before it is saved.
+             *
+             * @since 1.1.4
+             * 
+             * @param array $sequence The sequence data to be saved.
+             * @param array $funnel The funnel data associated with the sequence.
+             *
+             * @return array The modified sequence data.
+             */
             $sequence = apply_filters('fluentcrm_funnel_sequence_saving_' . $sequence['action_name'], $sequence, $funnel);
             if (Arr::get($sequence, 'type') == 'benchmark') {
                 $delay = $sequence['delay'];
@@ -904,7 +1023,7 @@ class FunnelController extends Controller
             $categories[] = 'fluent-support';
         }
 
-        if(defined('FLUENT_BOOKING')) {
+        if(defined('FLUENT_BOOKING_VERSION')) {
             $categories[] = 'fluent-booking';
         }
 
@@ -981,6 +1100,35 @@ class FunnelController extends Controller
 
         $funnel = Funnel::create($newFunnelData);
 
+        $funnelLabels = Arr::get($funnelArray, 'labels', []);
+        if (isset($funnelLabels) && !empty($funnelLabels)) {
+            $newLabels = [];
+            foreach ($funnelLabels as $key => $funnelLabel) {
+                // Validate required fields
+                if (!isset($funnelLabel['slug'], $funnelLabel['title'])) {
+                    continue; // Skip invalid labels
+                }
+
+                $existLabel = Label::where('taxonomy_name', 'global_label')->where('slug', $funnelLabel['slug'])->first();
+                if (!$existLabel) {
+                    $labelData = [
+                        'slug'  => sanitize_text_field($funnelLabel['slug']),
+                        'title' => sanitize_text_field($funnelLabel['title']),
+                    ];
+                    $color = sanitize_hex_color($funnelLabel['color']);
+
+                    $labelData['settings'] = [
+                        'color' => $color
+                    ];
+
+                    $existLabel = Label::create($labelData);
+                }
+
+                $newLabels[] = $existLabel->id;
+            }
+            $funnel->attachLabels($newLabels);
+        }
+
         $sequenceIds = [];
         $cDelay = 0;
         $delay = 0;
@@ -1008,7 +1156,18 @@ class FunnelController extends Controller
                 $delay = FunnelHelper::getDelayInSecond($sequence['settings']);
                 $cDelay += $delay;
             }
-
+            /**
+             * Determine the funnel sequence before saving.
+             *
+             * This filter allows modification of the funnel sequence before it is saved.
+             *
+             * @since 2.9.20
+             * 
+             * @param array $sequence The sequence data to be saved.
+             * @param array $funnel The funnel data associated with the sequence.
+             *
+             * @return array The modified sequence data.
+             */
             $sequence = apply_filters('fluentcrm_funnel_sequence_saving_' . $sequence['action_name'], $sequence, $funnel);
 
             if (Arr::get($sequence, 'type') == 'benchmark') {
@@ -1109,5 +1268,163 @@ class FunnelController extends Controller
         }
         return json_decode(wp_remote_retrieve_body($request), true);
     }
+
+    public function sendTestWebhook(Request $request)
+    {
+        $bodyDataType   = $request->getSafe('data.body_data_type');
+        $bodyDataValues = $request->getSafe('data.body_data_values', []);
+        $headerType     = $request->getSafe('data.header_type');
+        $headerData     = $request->getSafe('data.header_data', []);
+        $sendingMethod  = $request->getSafe('data.sending_method');
+        $requestFormat  = $request->getSafe('data.request_format');
+        $remoteUrl      = $request->getSafe('data.remote_url');
+
+        $this->validate($request->all(), [
+            'data.remote_url' => 'required|url',
+        ],[
+            'data.remote_url.required' => __('Remote URL is required', 'fluent-crm')
+        ]);
+
+
+        $user  = get_user_by('ID', get_current_user_id());
+        $email = $user->user_email;
+
+        $subscriber = Subscriber::where('email', $email)
+            ->orWhere('status', 'subscribed')
+            ->first();
+
+        if (!$subscriber) {
+            return $this->sendError([
+                'message' => __('No subscriber found to send test webhook. Please add at least one contact with subscribed status.', 'fluent-crm')
+            ]);
+        }
+
+        $headers = $this->prepareHeaders($headerType, $headerData, $subscriber);
+        $body = $this->prepareBody($bodyDataType, $bodyDataValues, $subscriber);
+
+        $isJson = 'no';
+        if ($requestFormat == 'json' && $sendingMethod == 'POST') {
+            $isJson = 'yes';
+            $headers['Content-Type'] = 'application/json; charset=utf-8';
+        }
+
+        if ($sendingMethod == 'GET') {
+            $remoteUrl = add_query_arg($body, $remoteUrl);
+        }
+
+        $data = [
+            'payload'       => [
+                'body'      => ($sendingMethod == 'POST') ? $body : null,
+                'method'    => $sendingMethod,
+                'headers'   => $headers,
+                /**
+                 * Determine whether to verify SSL for FluentCRM webhook requests.
+                 *
+                 * This filter allows you to control whether SSL verification should be performed
+                 * when making webhook requests in FluentCRM.
+                 *
+                 * @since 2.9.25
+                 *
+                 * @param bool Whether to verify SSL. Default false.
+                 */
+                'sslverify' => apply_filters('fluent_crm/webhook_ssl_verify', false)
+            ],
+            'remote_url'    => $remoteUrl,
+            'is_json'       => $isJson
+        ];
+
+        if ($data['is_json'] == 'yes') {
+            $data['payload']['body'] = json_encode($data['payload']['body']);
+        }
+
+        $response = wp_remote_request($data['remote_url'], $data['payload']);
+
+        if (is_wp_error($response)) {
+            $code = Arr::get($response, 'response.code');
+            $response->get_error_message() . ', with response code: ' . $code . ' - ' . (int)$response->get_error_code();
+            return $this->senderror([
+                'message' => __('Test Webhook failed to send', 'fluent-crm')
+            ]);
+        }
+
+        return [
+            'message'  => __('Test Webhook has been sent successfully', 'fluent-crm')
+        ];
+    }
+
+    private function prepareHeaders($headerType, $headerData, $subscriber)
+    {
+        $headers = [];
+        if ($headerType === 'with_headers') {
+            foreach ($headerData as $item) {
+                if (empty($item['data_key']) || empty($item['data_value'])) {
+                    continue;
+                }
+                $item['data_key'] = str_replace(' ', '-', $item['data_key']);
+                $headers[$item['data_key']] = Parser::parse($item['data_value'], $subscriber);
+            }
+        }
+        return $headers;
+    }
+
+    private function prepareBody($bodyDataType, $bodyDataValues, $subscriber)
+    {
+        $body = [];
+        if ($bodyDataType === 'subscriber_data') {
+            $body = $subscriber->toArray();
+            $body['custom_field'] = $subscriber->custom_fields();
+        } else {
+            foreach ($bodyDataValues as $item) {
+                if (empty($item['data_key']) || empty($item['data_value'])) {
+                    continue;
+                }
+                $body[$item['data_key']] = Parser::parse($item['data_value'], $subscriber);
+            }
+        }
+        return $body;
+    }
+  
+    public function updateFunnelTitle(Request $request, $funnelId)
+    {
+        $funnel = Funnel::findOrFail($funnelId);
+        $newTitle = $request->getSafe('title');
+
+        if ($funnel->title == $newTitle) {
+            return $this->sendError([
+                'message' => __('Funnel already have the same title', 'fluent-crm')
+            ]);
+        }
+
+        $funnel->title = $newTitle;
+        $funnel->save();
+
+        return $this->sendSuccess([
+            'message' => __(sprintf('Title has been updated to %s', $newTitle), 'fluent-crm')
+        ]);
+    }
+
+    public function updateLabels(Request $request, $funnel_id)
+    {
+        $funnel = Funnel::findOrFail($funnel_id);
+        $action = $request->getSafe('action');
+        $labelIds = $request->getSafe('label_ids');
+
+        if (!is_array($labelIds)) {
+            $labelIds = [$labelIds];
+        }
+
+        if ($action == 'attach') {
+            $funnel->attachLabels($labelIds);
+        } else {
+            $funnel->detachLabels($labelIds);
+        }
+
+        return $this->sendSuccess([
+            'message' => __('Labels has been updated', 'fluent-crm')
+        ]);
+
+    }
+
+
 
 }

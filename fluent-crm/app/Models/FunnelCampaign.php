@@ -76,7 +76,29 @@ class FunnelCampaign extends Campaign
             $emailSubject = $this->email_subject;
 
             if ($refSubscriber) {
+                /**
+                 * Filter the campaign email body content.
+                 *
+                 * This filter allows you to modify the email body content before it is sent to the subscriber.
+                 *
+                 * @since 2.7.0
+                 *
+                 * @param string $emailBody The email body content.
+                 * @param object $refSubscriber The subscriber object reference.
+                 */
                 $emailBody = apply_filters('fluent_crm/parse_campaign_email_text', $emailBody, $refSubscriber);
+                /**
+                 * Filter the email subject text for a campaign.
+                 *
+                 * This filter allows you to modify the email subject text before it is sent to the subscriber.
+                 *
+                 * @since 2.7.0
+                 * 
+                 * @param string $emailSubject The original email subject text.
+                 * @param object $refSubscriber The subscriber object reference.
+                 *
+                 * @return string The filtered email subject text.
+                 */
                 $emailSubject = apply_filters('fluent_crm/parse_campaign_email_text', $emailSubject, $refSubscriber);
             }
 
@@ -160,6 +182,18 @@ class FunnelCampaign extends Campaign
                 $emailBody = (new BlockParser($subscriber))->parse($emailBody);
             }
             $emailBody = str_replace(['https://fonts.googleapis.com/css2', 'https://fonts.googleapis.com/css'], 'https://fonts.bunny.net/css', $emailBody);
+            /**
+             * Filter the email body content for a campaign.
+             *
+             * This filter allows you to modify the email body content before it is sent to the subscriber.
+             *
+             * @since 2.8.44
+             * 
+             * @param string $emailBody The original email body content.
+             * @param object $subscriber The subscriber object containing subscriber details.
+             *
+             * @return string The filtered email body content.
+             */
             $emailBody = apply_filters('fluent_crm/parse_campaign_email_text', $emailBody, $subscriber);
             // email body creation done
 
@@ -169,6 +203,18 @@ class FunnelCampaign extends Campaign
                 $email['email_subject_id'] = $subjectItem->id;
             }
 
+            /**
+             * Filter the campaign email subject text.
+             *
+             * This filter allows you to modify the email subject text for a campaign.
+             *
+             * @since 2.8.40
+             * 
+             * @param string $emailSubject The original email subject text.
+             * @param object $subscriber The subscriber object.
+             *
+             * @return string The filtered email subject text.
+             */
             $email['email_subject'] = apply_filters('fluent_crm/parse_campaign_email_text', $emailSubject, $subscriber);
 
             if ($emailArgs) {
@@ -182,6 +228,18 @@ class FunnelCampaign extends Campaign
 
             $emailHash = Helper::generateEmailHash($inserted->id);
 
+            /**
+             * Filter the email body content of a campaign email.
+             *
+             * This filter allows you to modify the email body content before it is sent to the subscriber.
+             *
+             * @since 2.8.44
+             * 
+             * @param string $emailBody The email body content.
+             * @param object $subscriber The subscriber object containing subscriber details.
+             *
+             * @return string The filtered email body content.
+             */
             $emailBody = apply_filters('fluent_crm/parse_campaign_email_text', $emailBody, $subscriber);
             $urls = $this->getShortUrls($emailBody);
 

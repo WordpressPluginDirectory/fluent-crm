@@ -24,5 +24,7 @@ return array(
     'FluentCrmMigrations\\SubscriberPivot' => $baseDir . '/database/migrations/SubscriberPivot.php',
     'FluentCrmMigrations\\Subscribers' => $baseDir . '/database/migrations/Subscribers.php',
     'FluentCrmMigrations\\Tags' => $baseDir . '/database/migrations/Tags.php',
+    'FluentCrmMigrations\\TermRelations' => $baseDir . '/database/migrations/TermRelations.php',
+    'FluentCrmMigrations\\Terms' => $baseDir . '/database/migrations/Terms.php',
     'FluentCrmMigrations\\UrlStores' => $baseDir . '/database/migrations/UrlStores.php',
 );

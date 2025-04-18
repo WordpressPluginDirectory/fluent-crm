@@ -272,6 +272,23 @@ class Campaign extends Model
             $segmentSettings['offset'] = 0;
             $segmentSettings['limit'] = false;
 
+            /**
+             * Filter the dynamic segment details based on the segment slug.
+             *
+             * This filter allows you to modify the details of a dynamic segment.
+             *
+             * @since 2.5.93
+             * 
+             * @param array  The details of the dynamic segment.
+             * @param int    $segmentSettings['id']      The ID of the segment.
+             * @param array {
+             *     Additional context for the segment.
+             * 
+             *     @type bool  Whether to include the model in the context.
+             * }                    
+             *                               
+             * @return array Modified segment details.
+             */
             $segmentDetails = apply_filters('fluentcrm_dynamic_segment_' . $segmentSettings['slug'], [], $segmentSettings['id'], [
                 'model' => true
             ]);
@@ -484,8 +501,10 @@ class Campaign extends Model
             $subscribers = Subscriber::whereIn('id', $subscriberIds)->get();
         }
 
+        $validStatuses = ['subscribed', 'transactional'];
+
         foreach ($subscribers as $subscriber) {
-            if ($subscriber->status != 'subscribed') {
+            if (!in_array($subscriber->status, $validStatuses)) {
                 continue; // We don't want to send emails to non-subscribed members
             }
 
@@ -508,6 +527,16 @@ class Campaign extends Model
                 $email['email_subject_id'] = $subjectItem->id;
             }
 
+            /**
+             * Filter the campaign email subject text.
+             *
+             * This filter allows you to modify the email subject text for a campaign.
+             *
+             * @param string $emailSubject The original email subject text.
+             * @param object $subscriber The subscriber object.
+             *
+             * @return string The filtered email subject text.
+             */
             $email['email_subject'] = apply_filters('fluent_crm/parse_campaign_email_text', $emailSubject, $subscriber);
 
             $email['email_body'] = $this->email_body;
@@ -653,7 +682,7 @@ class Campaign extends Model
         if ($revenue && $revenue->value) {
             $data = (array)$revenue->value;
             foreach ($data as $currency => $cents) {
-                if ($cents) {
+                if ($cents && $currency !== 'orderIds') {
                     $stats['revenue'] = [
                         'label'    => __('Revenue', 'fluent-crm') . ' (' . $currency . ')',
                         'total'    => number_format($cents / 100, 2),
@@ -752,8 +781,8 @@ class Campaign extends Model
         }
 
         return [
-            'start' => date('Y-m-d H:i:s', $ranges[0]),
-            'end'   => date('Y-m-d H:i:s', $ranges[1])
+            'start' => gmdate('Y-m-d H:i:s', $ranges[0]),
+            'end'   => gmdate('Y-m-d H:i:s', $ranges[1])
         ];
     }
 
@@ -796,5 +825,77 @@ class Campaign extends Model
             'route'         => 'email_preview',
             'fc_newsletter' => $shareId
         ], site_url());
+    }
+
+    public function labelsTerm()
+    {
+        return $this->belongsToMany(Label::class, 'fc_term_relations', 'object_id', 'term_id')
+            ->wherePivot('object_type', __CLASS__);
+    }
+
+    public function labels()
+    {
+        $labelIds = TermRelation::where('object_id', $this->id)
+            ->where('object_type', __CLASS__)
+            ->pluck('term_id')
+            ->toArray();
+        return Label::whereIn('id', $labelIds)->get();
+    }
+
+    public function getFormattedLabels()
+    {
+        $labels = $this->labels();
+        return $labels->map(function ($label) {
+            return [
+                'id' => $label->id,
+                'slug' => $label->slug,
+                'title' => $label->title,
+                'color' => $label->settings['color'] ?? ''
+            ];
+        });
+    }
+
+    public function attachLabels($labelIds)
+    {
+        $labelIds = is_array($labelIds) ? $labelIds : [$labelIds];
+
+        if (empty($labelIds)) {
+            return $this;
+        }
+
+        $existingLabelIds = TermRelation::where('object_id', $this->id)
+            ->where('object_type', __CLASS__)
+            ->pluck('term_id')
+            ->toArray();
+
+        $newLabelIds = array_diff($labelIds, $existingLabelIds);
+
+        if (!empty($newLabelIds)) {
+            foreach ($newLabelIds as $labelId) {
+                TermRelation::create([
+                    'object_id' => $this->id,
+                    'object_type' => __CLASS__,
+                    'term_id' => $labelId
+                ]);
+            }
+        }
+
+        return $this;
+    }
+
+    public function detachLabels($labelIds)
+    {
+        $labelIds = is_array($labelIds) ? $labelIds : [$labelIds];
+
+        if (empty($labelIds)) {
+            return $this;
+        }
+
+        TermRelation::where('object_id', $this->id)
+            ->where('object_type', __CLASS__)
+            ->whereIn('term_id', $labelIds)
+            ->delete();
+
+        return $this;
     }
 }

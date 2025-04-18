@@ -67,6 +67,15 @@ class CampaignUrlMetric extends Model
             ->orderBy('total', 'DESC')
             ->get()->toArray();
 
+        /**
+         * Check the validity of a single click in FluentCRM Email Campaign.
+         *
+         * This filter allows you to modify the validity check for a single click.
+         *
+         * @since 2.8.43
+         * 
+         * @param bool $validity Default validity status. Default is true.
+         */
         if ($stats && apply_filters('fluent_crm/check_single_click_validity', true)) {
             $campaign = fluentCrmGetFromCache('campaign_' . $campaignId, function () use ($campaignId) {
                 return Campaign::withoutGlobalScopes()->find($campaignId);
@@ -159,7 +168,7 @@ class CampaignUrlMetric extends Model
         if ($revenue && $revenue->value) {
             $data = (array)$revenue->value;
             foreach ($data as $currency => $cents) {
-                if ($cents) {
+                if ($cents && $currency !== 'orderIds') {
                     $formattedStatus['revenue'] = [
                         'label'      => __('Revenue', 'fluent-crm') . ' (' . $currency . ')',
                         'type'       => 'revenue',

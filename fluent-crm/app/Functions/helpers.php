@@ -268,6 +268,11 @@ function fluentcrm_update_option($optionName, $value)
     if ($option) {
         $option->value = $value;
         $option->save();
+
+        if ($optionName == 'user_syncing_settings') {
+            do_action('fluent_crm/sync_subscriber_delete_setting', 'general_settings', $value['delete_contact_on_user_delete']);
+        }
+
         return $option->id;
     }
 
@@ -475,9 +480,12 @@ function fluentcrm_delete_subscriber_meta($subscriberId, $key)
 function fluentcrm_subscriber_statuses($isOptions = false)
 {
     /**
-     * Subscriber Statuses
+     * Contact statuses of FluentCRM.
      *
-     * @param: array $statuses array of subscriber statuses
+     * This filter allows modification of the contact statuses used in FluentCRM.
+     *
+     * @param array $statuses An array of default contact statuses.
+     * @return array The filtered array of contact statuses.
      */
     $statuses = apply_filters('fluent_crm/contact_statuses', [
         'subscribed',
@@ -485,7 +493,8 @@ function fluentcrm_subscriber_statuses($isOptions = false)
         'unsubscribed',
         'transactional',
         'bounced',
-        'complained'
+        'complained',
+        'spammed'
     ]);
 
     if (!$isOptions) {
@@ -501,6 +510,7 @@ function fluentcrm_subscriber_statuses($isOptions = false)
         'transactional' => __('Transactional', 'fluent-crm'),
         'bounced'       => __('Bounced', 'fluent-crm'),
         'complained'    => __('Complained', 'fluent-crm'),
+        'spammed'       => __('Spammed', 'fluent-crm'),
     ];
 
     foreach ($statuses as $status) {
@@ -525,14 +535,17 @@ function fluentcrm_subscriber_editable_statuses($isOptions = false)
 
     $statuses = fluentcrm_subscriber_statuses();
 
-    $unEditableStatuses = ['bounced', 'complained'];
+    $unEditableStatuses = ['bounced', 'complained', 'spammed'];
 
     $statuses = array_diff($statuses, $unEditableStatuses);
 
     /**
-     * Contact's Editable Statuses
+     * Define the editable contact statuses for FluentCRM contacts.
      *
-     * @param: array $editableStatuses array of subscriber's editable statuses
+     * This filter allows modification of the contact statuses that can be edited.
+     *
+     * @param array $statuses The current list of contact statuses.
+     * @return array The modified list of editable contact statuses.
      */
     $editableStatuses = apply_filters('fluent_crm/contact_editable_statuses', $statuses);
 
@@ -547,7 +560,8 @@ function fluentcrm_subscriber_editable_statuses($isOptions = false)
         'unsubscribed'  => __('Unsubscribed', 'fluent-crm'),
         'transactional' => __('Transactional', 'fluent-crm'),
         'bounced'       => __('Bounced', 'fluent-crm'),
-        'complained'    => __('Complained', 'fluent-crm')
+        'complained'    => __('Complained', 'fluent-crm'),
+        'spammed'       => __('Spammed', 'fluent-crm')
     ];
 
     foreach ($editableStatuses as $status) {
@@ -568,9 +582,12 @@ function fluentcrm_subscriber_editable_statuses($isOptions = false)
 function fluentcrm_contact_types($isOptions = false)
 {
     /**
-     * Contact Types
+     * Define FluentCRM contact types.
      *
-     * @param: array $contactTypes array of contact types
+     * This filter allows modification of the contact types used in FluentCRM.
+     *
+     * @param array $types An associative array of contact types.
+     * @return array Filtered array of contact types.
      */
     $types = apply_filters('fluent_crm/contact_types', [
         'lead'     => __('Lead', 'fluent-crm'),
@@ -603,9 +620,29 @@ function fluentcrm_contact_types($isOptions = false)
 function fluentcrm_activity_types()
 {
     /**
-     * Contact Activities
+     * Define FluentCRM contact activity types.
      *
-     * @param: array $activityTypes array of contact's Activity Types
+     * This filter allows modification of the contact activity types used in FluentCRM.
+     *
+     * @param array $types {
+     *     An associative array of contact activity types.
+     *
+     *     @type string $note              Note activity type.
+     *     @type string $call              Call activity type.
+     *     @type string $email             Email activity type.
+     *     @type string $meeting           Meeting activity type.
+     *     @type string $quote_sent        Quote sent activity type.
+     *     @type string $quote_accepted    Quote accepted activity type.
+     *     @type string $quote_refused     Quote refused activity type.
+     *     @type string $invoice_sent      Invoice sent activity type.
+     *     @type string $invoice_part_paid Invoice part paid activity type.
+     *     @type string $invoice_paid      Invoice paid activity type.
+     *     @type string $invoice_refunded  Invoice refunded activity type.
+     *     @type string $transaction       Transaction activity type.
+     *     @type string $feedback          Feedback activity type.
+     *     @type string $tweet             Tweet activity type.
+     *     @type string $facebook_post     Facebook post activity type.
+     * }
      */
     $types = apply_filters('fluent_crm/contact_activity_types', [
         'note'              => __('Note', 'fluent-crm'),
@@ -645,14 +682,19 @@ function fluentcrm_activity_types()
 function fluentcrm_strict_statues()
 {
     /**
-     * Contact's strict Statuses
+     * Determine FluentCRM Contact(subscriber) strict statuses.
      *
-     * @return array contact strict statuses
+     * This returns an array of subscriber statuses that are considered strict,
+     * such as 'unsubscribed', 'bounced', and 'complained'. The list can be modified
+     * using the 'subscriber_strict_statuses' filter.
+     *
+     * @return array The filtered list of subscriber strict statuses.
      */
     return apply_filters('subscriber_strict_statuses', [
         'unsubscribed',
         'bounced',
-        'complained'
+        'complained',
+        'spammed'
     ]);
 }
 
@@ -682,11 +724,24 @@ function fluentcrmCampaignTemplateCPTSlug()
 function fluentcrmCsvMimes()
 {
     /**
-     * Contact Import CSV Mimes
+     * Filters the list of MIME types allowed for CSV files.
      *
-     * @return array array of CSV mimes
+     * This applies the 'fluencrm_csv_mimes' filter to an array of MIME types
+     * that are considered valid for CSV files. The default MIME types included are:
+     * - 'text/csv'
+     * - 'text/plain'
+     * - 'application/csv'
+     * - 'text/comma-separated-values'
+     * - 'application/excel'
+     * - 'application/vnd.ms-excel'
+     * - 'application/vnd.msexcel'
+     * - 'text/anytext'
+     * - 'application/octet-stream'
+     * - 'application/txt'
+     *
+     * @return array Filtered list of MIME types allowed for CSV files.
      */
-    return apply_filters('fluencrm_csv_mimes', [
+    return apply_filters('fluentcrm_csv_mimes', [
         'text/csv',
         'text/plain',
         'application/csv',
@@ -708,19 +763,32 @@ function fluentcrmCsvMimes()
  */
 function fluentcrmGravatar($email, $name = '')
 {
+    $complianceSettings = \FluentCrm\App\Services\Helper::getComplianceSettings();
+
+    $gravatarEnabled = $complianceSettings['enable_gravatar'] == 'yes' ? true : false;
+    $fallbackEnabled =  $complianceSettings['gravatar_fallback'] == 'yes' ? true : false;
+
+    if (!$gravatarEnabled) {
+        return apply_filters('fluent_crm/default_avatar', FLUENTCRM_PLUGIN_URL . 'assets/images/avatar.png', $email);
+    }
+
     $hash = md5(strtolower(trim($email)));
 
-    /**
-     * Gravatar URL by Email
-     *
-     * @return string $gravatar url of the gravatar image
-     */
-
     $fallback = '';
-    if ($name) {
+    if ($fallbackEnabled && $name) {
         $fallback = '&d=https%3A%2F%2Fui-avatars.com%2Fapi%2F' . urlencode($name) . '/128';
     }
 
+    /**
+     * Apply filters to get the avatar URL.
+     *
+     * This generates a Gravatar URL based on the provided email hash and applies the 'fluent_crm/get_avatar' filter.
+     *
+     * @param string $hash The MD5 hash of the user's email address.
+     * @param string $fallback The fallback URL to use if the Gravatar is not found.
+     * @param string $email The user's email address.
+     * @return string The filtered avatar URL.
+     */
     return apply_filters('fluent_crm/get_avatar',
         "https://www.gravatar.com/avatar/{$hash}?s=128" . $fallback,
         $email
@@ -765,10 +833,11 @@ function fluentcrmHrefParams($content, $params = [])
 function fluentcrmTrackClicking()
 {
     /**
-     * Enable or Disable Click Tracking for Emails
+     * Determine if click tracking is enabled for FluentCRM Emails.
      *
-     * @param bool $trackClicking if click tracking is enabled or disabled
-     * @return bool
+     * This filter allows you to enable or disable click tracking in FluentCRM.
+     *
+     * @return bool True if click tracking is enabled, false otherwise.
      */
     return apply_filters('fluent_crm/track_click', true);
 }
@@ -781,10 +850,12 @@ function fluentcrmTrackClicking()
 function fluentCrmWillTrackIp()
 {
     /**
-     * Enable or Disable IP Address Tracking for Emails
+     * Enable or Disable IP Address Tracking for FluentCRM Emails.
      *
-     * @param bool $trackIp return true if ip address tracking is enabled or false if disabled
-     * @return bool
+     * This filter allows customization of whether the user's IP address should be tracked.
+     * By default, it returns true, indicating that the IP should be tracked.
+     *
+     * @return bool Filtered value indicating whether the user's IP should be tracked.
      */
     return apply_filters('fluent_crm/will_track_user_ip', true);
 }
@@ -955,6 +1026,14 @@ function fluentcrm_get_current_contact()
 
 function fluentcrm_menu_url_base($ext = '')
 {
+    /**
+     * Define the base URL for the FluentCRM admin menu.
+     *
+     * This filter allows customization of the base URL used in the FluentCRM admin menu.
+     * By default, it points to the FluentCRM admin page within the WordPress admin dashboard.
+     *
+     * @param string The base URL for the FluentCRM admin menu.
+     */
     $url = apply_filters('fluent_crm/menu_url_base', admin_url('admin.php?page=fluentcrm-admin#/'));
     if($ext) {
         $url .= $ext;
@@ -1000,9 +1079,25 @@ function fluentcrm_get_crm_profile_html($userIdOrEmail, $checkPermission = true,
 
     $stats = $profile->stats();
 
+    /**
+     * Calculate the lifetime value of a contact.
+     *
+     * This filter allows modification of the lifetime value of a contact profile.
+     *
+     * @param int   $lifeTimeValue The initial lifetime value, default is 0.
+     * @param array $profile       The contact profile data.
+     *
+     * @return int The modified lifetime value.
+     */
     $lifeTimeValue = apply_filters('fluent_crm/contact_lifetime_value', 0, $profile);
 
     if ($lifeTimeValue) {
+        /**
+         * Define the lifetime value with a currency sign and formats it according to the international number format.
+         *
+         * @param string $lifeTimeValue The lifetime value to be formatted.
+         * @return string The formatted lifetime value with currency sign.
+         */
         $lifeTimeValue = apply_filters('fluentcrm_currency_sign', '') . ' ' . number_format_i18n($lifeTimeValue, 2);
     }
 
@@ -1203,6 +1298,14 @@ function fluentcrm_queue_on_background($callbackName, $payload)
         'blocking'  => false,
         'body'      => $body,
         'cookies'   => $_COOKIE,
+        /**
+         * Determine if local SSL verification should be performed.
+         *
+         * This filter allows you to modify the SSL verification setting for local HTTPS requests.
+         *
+         * @param bool $sslverify Whether to verify the SSL certificate. Default is false.
+         * @return bool Filtered value for SSL verification.
+         */
         'sslverify' => apply_filters('fluent_crm/https_local_ssl_verify', false),
     );
 
@@ -1224,9 +1327,12 @@ function fluentcrm_queue_on_background($callbackName, $payload)
 function fluentcrm_is_rtl()
 {
     /**
-     * If FluentCRM is running on RTL Mode
+     * Determine if the text direction is right-to-left for FluentCRM Emails.
      *
-     * @param bool $is_rtl - return true if you want to render FluentCRM emails in RTL mode
+     * This uses the WordPress `apply_filters` function to allow developers to modify
+     * the return value of the `is_rtl()` function, which checks if the current locale is RTL.
+     *
+     * @return bool True if you want to render FluentCRM emails in RTL mode, false otherwise.
      */
     return apply_filters('fluent_crm/is_rtl', is_rtl());
 }
@@ -1298,6 +1404,12 @@ function fluentCrmWillAnonymizeIp()
     static $status;
     if ($status) {
         $bool = $status == 'yes';
+        /**
+         * This allows customization of the anonymization of IP addresses.
+         *
+         * @param bool $bool The boolean value indicating whether to anonymize the IP address.
+         * @return bool The filtered boolean value.
+         */
         return apply_filters('fluent_crm/anonymize_ip', $bool);
     }
 
@@ -1307,6 +1419,13 @@ function fluentCrmWillAnonymizeIp()
 
     $bool = $status == 'yes';
 
+    /**
+     * This allows you to modify the boolean value that determines whether
+     * IP addresses should be anonymized.
+     *
+     * @param bool $bool The boolean value to be filtered.
+     * @return bool The filtered boolean value.
+     */
     return apply_filters('fluent_crm/anonymize_ip', $bool);
 }
 
@@ -1475,6 +1594,14 @@ if (!function_exists('fluentCrmMaxRunTime')) {
 
         $maxRunTime = $maxRunTime - 3;
 
+        /**
+         * Determine the maximum run time of FluentCRM.
+         *
+         * This filter allows you to modify the maximum run time for a specific process.
+         *
+         * @param int $maxRunTime The default maximum run time.
+         * @return int The filtered maximum run time.
+         */
         return apply_filters('fluent_crm/max_run_time', $maxRunTime);
     }
 }
@@ -1486,6 +1613,14 @@ function fluentCrmIsTimeOut($maxSeconds = 30)
 
 function fluentCrmEmailSendableStatuses()
 {
+    /**
+     * Determine the email sendable contact statuses for FluentCRM.
+     *
+     * This returns an array of statuses that are considered sendable for emails from FluentCRM.
+     * The default statuses are 'subscribed' and 'transactional'.
+     *
+     * @return array The filtered array of email sendable statuses.
+     */
     return apply_filters('fluent_crm/email_sendable_statuses', [
         'subscribed',
         'transactional'

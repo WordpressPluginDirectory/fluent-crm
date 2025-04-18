@@ -81,7 +81,7 @@ class TagsController extends Controller
         if (empty($allData['slug'])) {
             $allData['slug'] = sanitize_title($allData['title'], 'display');
         } else {
-            $allData['slug'] = sanitize_title($allData['slug'], 'display');
+            $allData['slug'] = sanitize_text_field($allData['slug']);
         }
 
         $allData = $this->validate($allData, [

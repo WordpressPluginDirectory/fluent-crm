@@ -213,6 +213,18 @@ $content_font_family = $config['content_font_family'];
     .fc_latest_post_item {
         border:1px solid #edeef4;
     }
+    .fc_latest_post_item tbody tr td .fc_latest_post_overlay {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+    .fc_latest_post_item tbody tr td {
+        position: relative;
+    }
+    .fc_latest_post_item.layout-7 tbody tr td .fc_latest_post_overlay,
+    .fc_latest_post_item.default tbody tr td .fc_latest_post_overlay {
+        height: 350px;
+    }
     .fc_latest_post_item tbody tr td img {
         width: 100%;
         max-height: 400px;
@@ -235,6 +247,11 @@ $content_font_family = $config['content_font_family'];
     }
     .fc_latest_post_item.layout-6 .fc_latest_post_content .meta {
         margin: 0;
+    }
+    .fc_latest_post_item.layout-6 .fc_latest_post_overlay {
+        width: 100px;
+        height: 100px;
+        border-radius: 5px;
     }
     .fc_latest_post_item .fc_latest_post_content a {
         text-decoration: none;
@@ -265,6 +282,7 @@ $content_font_family = $config['content_font_family'];
     }
     .fc_latest_post_item .fc_latest_post_content .meta .author img {
         margin-right: 7px;
+        flex: none;
     }
     .fc_latest_post_item .fc_latest_post_content .meta .comments {
         display: block;
@@ -272,6 +290,9 @@ $content_font_family = $config['content_font_family'];
     }
     .fc_latest_post_item.layout-2 .fc_latest_post_content .fc_latest_post_btn {
         display: inline-block;
+    }
+    .fc_latest_post_item.layout-3 tbody tr td .fc_latest_post_overlay {
+        height: 220px;
     }
     .fc_latest_post_item.layout-4 .fc_latest_post_content .description {
         margin: 0;
@@ -346,6 +367,10 @@ $content_font_family = $config['content_font_family'];
         .fc_latest_post_item.layout-4 > tbody .fc_latest_post_item_tr {
             display:block !important;
             flex-wrap: wrap;
+        }
+        .fc_latest_post_item.layout-7 tbody tr td .fc_latest_post_overlay,
+        .fc_latest_post_item.default tbody tr td .fc_latest_post_overlay {
+            height: 200px;
         }
     }
 </style>

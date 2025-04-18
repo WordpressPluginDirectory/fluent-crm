@@ -73,8 +73,12 @@ class Companies
                 $existingMeta = $exist->meta;
                 $values = Arr::get($data, 'custom_values', []);
                 $values = (new CustomCompanyField())->formatCustomFieldValues($values);
-
-                $existingMeta['custom_values'] = $values;
+                $temp = $existingMeta['custom_values'];
+                foreach ($values as $key => $value)
+                {
+                    $temp[$key] = $value;
+                }
+                $existingMeta['custom_values'] = $temp;
 
                 $exist->meta = $existingMeta;
                 unset($data['custom_values']);
@@ -88,10 +92,14 @@ class Companies
             return false;
         }
 
-        $data = Arr::only($data, (new Company())->getFillable());
+        $fillables = (new Company())->getFillable();
+        $fillables[] = 'custom_values';
+        $data = Arr::only($data, $fillables);
+        $values = Arr::get($data, 'custom_values', []);
+        $values = (new CustomCompanyField())->formatCustomFieldValues($values);
 
         $data['meta'] = [
-            'custom_values' => Arr::get($data, 'custom_values', [])
+            'custom_values' => $values
         ];
 
         $company = Company::create($data);

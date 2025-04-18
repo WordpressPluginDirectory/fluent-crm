@@ -146,8 +146,10 @@ class SequencePoints
         $this->immediateSequences = $immediateSequences;
 
         if (!$this->nextSequence && $isInChild && !$conditionalBlock) {
+
             // let's find the parent sequence
             $parentSequence = FunnelSequence::where('id', $this->lastSequence->id)->first();
+
             if ($parentSequence) {
                 $sequences = FunnelSequence::where('funnel_id', $this->funnel->id)
                     ->where('sequence', '>', $parentSequence->sequence)
@@ -162,6 +164,7 @@ class SequencePoints
                 if ($sequences->isEmpty()) {
                     return;
                 }
+
 
                 if ($inWaitTimes) {
                     $this->hasNext = true;
@@ -178,6 +181,12 @@ class SequencePoints
                 foreach ($sequences as $sequence) {
                     if ($this->requiredBenchMark || $conditionalBlock || $hasEndSequence) {
                         continue;
+                    }
+
+                    if ($sequence->action_name == 'fluentcrm_wait_times' && !$inWaitTimes) {
+                        $seconds = FunnelHelper::getCurrentDelayInSeconds($sequence->settings, $sequence, $this->funnelSubscriber ? $this->funnelSubscriber->id : null);
+                        $this->nextSequenceExecutionTime = gmdate('Y-m-d H:i:s', current_time('timestamp') + $seconds);
+                        $inWaitTimes = true;
                     }
 
                     /*

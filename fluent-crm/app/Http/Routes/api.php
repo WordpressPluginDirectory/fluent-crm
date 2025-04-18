@@ -122,9 +122,12 @@ $router->prefix('campaigns')->withPolicy('CampaignPolicy')->group(function ($rou
     $router->get('{id}/overview_stats', 'CampaignController@getOverviewStats')->int('id');
     $router->get('{id}/link-report', 'CampaignAnalyticsController@getLinksReport')->int('id');
     $router->get('{id}/revenues', 'CampaignAnalyticsController@getRevenueReport')->int('id');
+    $router->post('{id}/revenues/resync', 'CampaignAnalyticsController@getRevenueReSyncReport')->int('id');
     $router->get('{id}/unsubscribers', 'CampaignAnalyticsController@getUnsubscribers')->int('id');
 
     $router->get('{id}/contacts-by-segment', 'CampaignAnalyticsController@getSegmentedContacts')->int('id');
+
+    $router->put('{id}/update-labels', 'CampaignController@updateLabels')->int('id');
 });
 
 $router->prefix('templates')->withPolicy('TemplatePolicy')->group(function ($router) {
@@ -141,6 +144,7 @@ $router->prefix('templates')->withPolicy('TemplatePolicy')->group(function ($rou
     $router->post('do-bulk-action', 'TemplateController@handleBulkAction');
 
     $router->post('set-global-style', 'TemplateController@setGlobalStyle');
+    $router->get('/built-in-templates', 'TemplateController@getBuiltInTemplates');
 
 });
 
@@ -171,6 +175,7 @@ $router->prefix('funnels')->withPolicy('FunnelPolicy')->group(function ($router)
     $router->put('{id}', 'FunnelController@updateFunnelProperty')->int('id');
     $router->put('{id}/change-trigger', 'FunnelController@changeTrigger')->int('id');
     $router->post('{id}/sequences', 'FunnelController@saveSequences')->int('id');
+    $router->put('funnel/{id}/title', 'FunnelController@updateFunnelTitle')->int('id');
 
     $router->post('{id}/sequences/save-email-action', 'FunnelController@saveEmailAction')->int('id');
 
@@ -188,6 +193,10 @@ $router->prefix('funnels')->withPolicy('FunnelPolicy')->group(function ($router)
 
     $router->get('{id}/syncable-counts', 'FunnelController@getSyncableContactCounts')->int('id');
     $router->post('{id}/sync-new-steps', 'FunnelController@syncNewSteps')->int('id');
+
+    $router->post('send-test-webhook', 'FunnelController@sendTestWebhook');
+
+    $router->put('{id}/update-labels', 'FunnelController@updateLabels')->int('id');
 
 });
 
@@ -260,6 +269,7 @@ $router->prefix('setting')->withPolicy('SettingsPolicy')->group(function ($route
 
     $router->get('experiments', 'SettingsController@getExperimentalSettings');
     $router->post('experiments', 'SettingsController@updateExperimentalSettings');
+    $router->get('experiments/campaigns', 'SettingsController@getCampaigns');
 
     $router->get('system-logs', 'SystemLogController@index');
     $router->get('system-logs/reset', 'SystemLogController@deleteAll');
@@ -270,6 +280,13 @@ $router->prefix('setting')->withPolicy('SettingsPolicy')->group(function ($route
 $router->prefix('custom-fields')->withPolicy('CustomFieldsPolicy')->group(function ($router) {
     $router->get('contacts', 'CustomContactFieldsController@getGlobalFields');
     $router->put('contacts', 'CustomContactFieldsController@saveGlobalFields');
+});
+
+$router->prefix('labels')->withPolicy('CustomFieldsPolicy')->group(function ($router) {
+    $router->get('/', 'GlobalLabelController@getlabels');
+    $router->post('/', 'GlobalLabelController@create');
+    $router->put('{id}', 'GlobalLabelController@update')->int('id');
+    $router->delete('{id}', 'GlobalLabelController@delete')->int('id');
 });
 
 $router->prefix('webhooks')->withPolicy('WebhookPolicy')->group(function ($router) {

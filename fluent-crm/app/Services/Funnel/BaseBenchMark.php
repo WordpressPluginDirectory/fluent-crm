@@ -30,6 +30,17 @@ abstract class BaseBenchMark
             return $this->actionArgNum;
         });
 
+        /**
+         * Filter the funnel sequence before saving.
+         *
+         * The dynamic portion of the hook name, `$this->triggerName`, refers to the name of the trigger.
+         *
+         * @since 2.6.0
+         * 
+         * @param array $sequence The sequence data to be filtered.
+         *
+         * @return array The filtered sequence data.
+         */
         apply_filters('fluentcrm_funnel_sequence_saving_' . $this->triggerName, function ($sequence) {
             $sequence['type'] = 'benchmark';
             return $sequence;

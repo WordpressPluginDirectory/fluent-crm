@@ -30,6 +30,7 @@ class EmailDesignTemplates
         $view = FluentCrm('view');
         $emailBody = $view->make('emails.plain.Template', $templateData);
         $emailBody = $emailBody->__toString();
+
         $emogrifier = new Emogrifier($emailBody);
         $emogrifier->disableInvisibleNodeRemoval();
         return $emogrifier->emogrify();
@@ -108,8 +109,7 @@ class EmailDesignTemplates
             'paragraph_font_size'   => '',
             'paragraph_font_family' => '',
             'paragraph_line_height' => '',
-            'headings_color'        => '',
-            'heading_font_family'   => '',
+            'headings_color'        => ''
         ];
 
         $templateData['config'] = wp_parse_args($templateData['config'], $configDefault);
@@ -140,8 +140,7 @@ class EmailDesignTemplates
             'paragraph_font_size'   => '',
             'paragraph_font_family' => '',
             'paragraph_line_height' => '',
-            'headings_color'        => '',
-            'heading_font_family'   => '',
+            'headings_color'        => ''
         ];
 
         $templateData['config'] = wp_parse_args($templateData['config'], $configDefault);

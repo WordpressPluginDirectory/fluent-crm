@@ -27,7 +27,7 @@ class FluentFormSubmissionTrigger extends BaseTrigger
     public function getTrigger()
     {
         return [
-            'category'    => __('CRM', 'fluent-crm'),
+            'category'    => __('Fluent Forms', 'fluent-crm'),
             'label'       => __('New Form Submission (Fluent Forms)', 'fluent-crm'),
             'description' => __('This Funnel will be initiated when a new form submission has been submitted', 'fluent-crm'),
             'icon'        => 'fc-icon-fluentforms',

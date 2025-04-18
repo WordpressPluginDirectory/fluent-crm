@@ -23,8 +23,16 @@ class SystemLogController extends Controller
      */
     public function index(Request $request)
     {
-        $logs = SystemLog::orderBy('id', 'DESC')
-            ->paginate($request->per_page ?: 20);
+        $search = sanitize_text_field($request->get('search'));
+
+        $logs = SystemLog::orderBy('id', 'DESC');
+
+        if (!empty($search)) {
+            $logs = $logs->where('title', 'LIKE', "%{$search}%")
+                ->orWhere('description', 'LIKE', "%{$search}%");
+        }
+
+        $logs = $logs->paginate($request->per_page ?: 20);
 
         return [
             'logs' => $logs

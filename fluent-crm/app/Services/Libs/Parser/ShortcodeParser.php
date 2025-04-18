@@ -222,7 +222,7 @@ class ShortcodeParser
                     'secure_hash' => fluentCrmGetContactManagedHash($subscriber->id)
                 ]), site_url('/'));
             case "unsubscribe_html":
-                if ($defaultValue) {
+                if (!$defaultValue) {
                     $defaultValue = __('Unsubscribe', 'fluent-crm');
                 }
 
@@ -235,7 +235,7 @@ class ShortcodeParser
 
                 return '<a class="fc_unsub_url" href="' . $url . '">' . $defaultValue . '</a>';
             case "manage_subscription_html":
-                if ($defaultValue) {
+                if (!$defaultValue) {
                     $defaultValue = __('Email Preference', 'fluent-crm');
                 }
 
@@ -296,20 +296,47 @@ class ShortcodeParser
         $customProperty = $valueKeys[1];
 
         if ($customKey == 'custom') {
+            $existingCustomFields = fluentcrm_get_custom_contact_fields();
             $customValues = $subscriber->custom_fields();
+
             $value = Arr::get($customValues, $customProperty, $defaultValue);
             if (is_array($value)) {
                 return implode(', ', $value);
             }
 
             $multiLines = preg_split("/\r\n|\n|\r/", $value);
-            if ($multiLines && is_array($multiLines)) {
-                return implode('<br/> ', $multiLines);
-            }
 
-            if ($value) {
+            if (!$multiLines) {
                 return $value;
             }
+
+            $formattedValue = implode('<br/> ', $multiLines);
+
+            // Find the custom field
+            $fieldKeys = array_column($existingCustomFields, 'slug');
+            $customFieldIndex = array_search($customProperty, $fieldKeys);
+
+            if ($customFieldIndex === false) {
+                return $formattedValue;
+            }
+
+            $matchedObject = $existingCustomFields[$customFieldIndex];
+
+            // Format date or date_time fields
+            $timestamp = strtotime($formattedValue);
+
+            if ($timestamp && in_array($matchedObject['type'], ['date', 'date_time'])) {
+                $date_format = get_option('date_format');
+
+                if ($matchedObject['type'] === 'date_time') {
+                    $time_format = get_option('time_format');
+                    $date_format .= ' ' . $time_format; // Append time format
+                }
+
+                $formattedValue = date_i18n($date_format, $timestamp);
+            }
+            $formattedValue = htmlspecialchars($formattedValue, ENT_QUOTES, 'UTF-8');
+            return $formattedValue;
         }
 
         if ($customKey == 'company') {

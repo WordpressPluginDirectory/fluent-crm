@@ -56,6 +56,15 @@ class OptionsController extends Controller
      */
     public function countries()
     {
+        /**
+         * Determine the list of countries in FluentCRM.
+         *
+         * This filter allows you to modify the list of countries used in FluentCRM.
+         *
+         * @since 2.7.0
+         *
+         * @param array An array of countries.
+         */
         $countries = apply_filters('fluent_crm/countries', []);
         $formattedCountries = [];
         foreach ($countries as $country) {
@@ -218,6 +227,15 @@ class OptionsController extends Controller
 
     public function segments()
     {
+        /**
+         * Determine the dynamic segments in FluentCRM.
+         *
+         * This filter allows you to modify the dynamic segments used in FluentCRM.
+         *
+         * @since 1.0.0
+         *
+         * @param array An array of dynamic segments.
+         */
         $segments = apply_filters('fluentcrm_dynamic_segments', []);
 
         return [
@@ -601,8 +619,38 @@ class OptionsController extends Controller
             ];
         }
 
+        if ($optionKey == 'users') {
+            $users = Helper::searchWPUsers($search);
+
+            $usersWithLessFields = [];
+
+            foreach ($users as $user) {
+                $usersWithLessFields[] = [
+                    'id'               => $user->ID,
+                    'user_email'       => $user->user_email,
+                    'name'             => $user->display_name ?? $user->user_email,
+                    'title'            => $user->display_name . ' (' . $user->user_email . ')'
+                ];
+            }
+
+            return [
+                'options' => $usersWithLessFields
+            ];
+        }
+
 
         return [
+            /**
+             * Determine the AJAX options for FluentCRM.
+             *
+             * This filter allows modification of the AJAX options based on the provided option key, search term, and included IDs.
+             *
+             * @since 2.5.9
+             *
+             * @param array  The options array to be filtered.
+             * @param string $search      The search term used to filter the options.
+             * @param array  $includedIds The IDs to be included in the options.
+             */
             'options' => apply_filters('fluentcrm_ajax_options_' . $optionKey, [], $search, $includedIds)
         ];
     }
@@ -665,6 +713,21 @@ class OptionsController extends Controller
     {
         $provider = $request->get('provider');
 
+        /**
+         * Determine the cascade selection options for a given provider.
+         *
+         * The dynamic portion of the hook name, `$provider`, refers to the specific provider for which the options are being filtered.
+         *
+         * @since 2.9.23
+         *
+         * @param array {
+         *     An array of options for the cascade selection.
+         *
+         *     @type array $options  The options for the selection.
+         *     @type bool  $has_more Whether there are more options available.
+         * }
+         * @param array $request The request data.
+         */
         return apply_filters('fluent_crm/cascade_selection_options_'.$provider, [
             'options' => [],
             'has_more' => true

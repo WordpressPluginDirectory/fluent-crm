@@ -94,6 +94,15 @@ class ReportingController extends Controller
     public function getAdvancedReportProviders()
     {
         return [
+            /**
+             * Determine the advanced report providers for FluentCRM.
+             *
+             * This filter allows you to modify the list of advanced report providers.
+             *
+             * @since 1.0.0
+             *
+             * @param array An array of advanced report providers.
+             */
             'providers' => apply_filters('fluent_crm/advanced_report_providers', [])
         ];
     }

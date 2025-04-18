@@ -38,6 +38,33 @@ class PrefFormHandler
             return $noContactContent;
         }
 
+        /**
+         * Determine the preference form labels in FluentCRM.
+         *
+         * This filter allows modification of the labels used in the preference form.
+         *
+         * @since 2.5.95
+         *
+         * @param array {
+         *     An associative array of labels.
+         *
+         *     @type string $first_name      Label for the first name field.
+         *     @type string $last_name       Label for the last name field.
+         *     @type string $prefix          Label for the title field.
+         *     @type string $email           Label for the email field.
+         *     @type string $phone           Label for the phone/mobile field.
+         *     @type string $dob             Label for the date of birth field.
+         *     @type string $address_line_1  Label for the address line 1 field.
+         *     @type string $address_line_2  Label for the address line 2 field.
+         *     @type string $city            Label for the city field.
+         *     @type string $state           Label for the state field.
+         *     @type string $postal_code     Label for the ZIP code field.
+         *     @type string $country         Label for the country field.
+         *     @type string $update          Label for the update info button.
+         *     @type string $address_heading Label for the address information section.
+         *     @type string $list_label      Label for the mailing list groups section.
+         * }
+         */
         $labels = apply_filters('fluent_crm/pref_labels', [
             'first_name'      => __('First Name', 'fluent-crm'),
             'last_name'       => __('Last Name', 'fluent-crm'),
@@ -81,6 +108,17 @@ class PrefFormHandler
             ];
         }
 
+        /**
+         * Determine the preference form fields against a subscriber or contact data in FluentCRM.
+         *
+         * This filter allows modification of the preference form fields before they are displayed.
+         *
+         * @since 2.5.95
+         *
+         * @param array $formFields The current form fields.
+         * @param object $subscriber The subscriber object.
+         * @return array Modified form fields.
+         */
         $formFields = apply_filters('fluent_crm/pref_form_fields', $formFields, $subscriber);
 
         $formFields[] = [
@@ -389,8 +427,8 @@ class PrefFormHandler
                 'id'       => 'fc_date_of_birth',
                 'atts'     => [
                     'type'          => 'text',
-                    'data-max-year' => date('Y'),
-                    'data-min-year' => date('Y') - 120,
+                    'data-max-year' => gmdate('Y'),
+                    'data-min-year' => gmdate('Y') - 120,
                     'class'         => 'fc_date_item',
                     'data-format'   => 'YYYY-MM-DD',
                     'placeholder'   => __('Date of Birth', 'fluent-crm'),
@@ -413,6 +451,15 @@ class PrefFormHandler
                 'html' => '<h4 class="fc_address_info_heading">' . Arr::get($labels, 'address_heading', 'Address Information') . '</h4>'
             ];
 
+            /**
+             * Filter to modify the list of country names for the Preference Form Field in FluentCRM.
+             *
+             * This filter allows you to modify the list of country names used in FluentCRM.
+             *
+             * @since 2.7.0
+             * 
+             * @param array An array of country names.
+             */
             $countryNames = apply_filters('fluent_crm/countries', []);
 
             $formattedCountries = [];

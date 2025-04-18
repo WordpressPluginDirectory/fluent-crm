@@ -177,9 +177,11 @@ class Reporting
                     if ($revenue = fluentcrm_get_campaign_meta($refCampaign, '_campaign_revenue')) {
                         $revs = [];
                         foreach ($revenue->value as $currency => $cents) {
-                            $money = $cents/100;
-                            $money = number_format($money, (is_int($money)) ? 0 : 2);
-                            $revs[] = strtoupper($currency).' '.$money;
+                            if (is_numeric($cents) && $cents && $currency !== 'orderIds') {
+                                $money = $cents / 100;
+                                $money = number_format($money, (is_int($money)) ? 0 : 2);
+                                $revs[] = strtoupper($currency) . ' ' . $money;
+                            }
                         }
                         if($revs) {
                             $report['revenues'] = $revs;

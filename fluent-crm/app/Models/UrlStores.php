@@ -39,7 +39,7 @@ class UrlStores extends Model
         $short = self::getNextShortUrl();
         // otherwise we have to create
         $data = [
-            'url'        => $longUrl,
+            'url'        => htmlspecialchars_decode($longUrl),
             'short'      => $short,
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s')
@@ -64,6 +64,16 @@ class UrlStores extends Model
         }
 
         $num = $num + 100000; // to make it atleast 4 char
+        /**
+         * Filter the character set used for URL generation in FluentCRM.
+         *
+         * This filter allows you to modify the set of characters that will be used
+         * when generating URLs in FluentCRM.
+         *
+         * @since 1.0.0
+         *
+         * @param string The character set used for URL generation. Default is 'abcdefghijklm1234567890nopqrstuvwxyz'.
+         */
         $chars = apply_filters('fluentcrm_url_charset', '0123456789abcdefghijklmnopqrstuvwxyz');
 
         $string = '';
@@ -80,7 +90,9 @@ class UrlStores extends Model
                 $num = self::bcDivFallBack($num, $len);
             }
 
-            $string = $chars[$mod] . $string;
+            if (isset($chars[$mod])) {
+                $string = $chars[$mod] . $string;
+            }
         }
 
         return $chars[intval($num)] . $string;
@@ -88,6 +100,16 @@ class UrlStores extends Model
 
     public static function getStringByNumber($num)
     {
+        /**
+         * Filter the character set used for URL generation in FluentCRM.
+         *
+         * This filter allows you to modify the set of characters that will be used
+         * when generating URLs in FluentCRM.
+         *
+         * @since 1.0.0
+         *
+         * @param string The character set used for URL generation. Default is 'abcdefghijklm1234567890nopqrstuvwxyz'.
+         */
         $chars = apply_filters('fluentcrm_url_charset', 'abcdefghijklm1234567890nopqrstuvwxyz');
         $string = '';
         $len = strlen($chars);

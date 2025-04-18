@@ -21,15 +21,19 @@ class TemplateController extends Controller
     public function templates(Request $request)
     {
         $order = $request->getSafe('order', 'desc', 'sanitize_sql_orderby');
-        $orderBy = $request->get('orderBy', 'ID', 'sanitize_sql_orderby');
+        $orderBy = $request->getSafe('orderBy', 'ID', 'sanitize_sql_orderby');
 
-        $templates = Template::emailTemplates(
+        $templatesQuery = Template::emailTemplates(
             $request->get('types', ['publish', 'draft'])
         );
-        if (!empty($request->get('search'))) {
-            $templates = $templates->where('post_title', 'LIKE', '%' . $request->getSafe('search') . '%');
+
+        if ($search = $request->getSafe('search')) {
+            $templatesQuery->where('post_title', 'LIKE', '%' . $search . '%');
         }
-        $templates = $templates->orderBy($orderBy, $order)
+
+        // Order the query results and paginate
+        $templates = $templatesQuery
+            ->orderBy($orderBy, $order)
             ->paginate();
 
         foreach ($templates as $template) {
@@ -86,6 +90,14 @@ class TemplateController extends Controller
                 ]
             ];
 
+            /**
+             * Filter the template data before editing.
+             *
+             * @since 2.6.51
+             *
+             * @param array  $templateData The data of the template being edited.
+             * @param object $template     The template object.
+             */
             $templateData = apply_filters('fluent_crm/editing_template_data', $templateData, $template);
 
         } else {
@@ -136,9 +148,9 @@ class TemplateController extends Controller
         }
 
         $postData['post_modified'] = current_time('mysql');
-        $postData['post_modified_gmt'] = date('Y-m-d H:i:s');
+        $postData['post_modified_gmt'] = gmdate('Y-m-d H:i:s');
         $postData['post_date'] = current_time('mysql');
-        $postData['post_date_gmt'] = date('Y-m-d H:i:s');
+        $postData['post_date_gmt'] = gmdate('Y-m-d H:i:s');
         $postData['post_type'] = fluentcrmTemplateCPTSlug();
 
         $templateId = wp_insert_post($postData);
@@ -165,27 +177,32 @@ class TemplateController extends Controller
 
     public function duplicate($templateId)
     {
-        $template = Template::find($templateId)->toArray();
-        $postData = Arr::only($template, [
-            'post_title',
-            'post_content',
-            'post_excerpt'
-        ]);
+        $template = Template::findOrFail($templateId);
 
-        $postData['post_modified'] = current_time('mysql');
-        $postData['post_modified_gmt'] = date('Y-m-d H:i:s');
-        $postData['post_date'] = current_time('mysql');
-        $postData['post_date_gmt'] = date('Y-m-d H:i:s');
-        $postData['post_type'] = fluentcrmTemplateCPTSlug();
-        $postData['post_title'] = __('[Duplicate] ', 'fluent-crm') . $postData['post_title'];
+        $postData = [
+            'post_title'        => __('[Duplicate] ', 'fluent-crm') . $template['post_title'],
+            'post_content'      => $template['post_content'],
+            'post_excerpt'      => $template['post_excerpt'],
+            'post_modified'     => current_time('mysql'),
+            'post_modified_gmt' => gmdate('Y-m-d H:i:s'),
+            'post_date'         => current_time('mysql'),
+            'post_date_gmt'     => gmdate('Y-m-d H:i:s'),
+            'post_type'         => fluentcrmTemplateCPTSlug(),
+        ];
 
         $newTemplateId = wp_insert_post($postData);
 
-        update_post_meta($newTemplateId, '_email_subject', get_post_meta($templateId, '_email_subject', true));
-        update_post_meta($newTemplateId, '_edit_type', get_post_meta($templateId, '_edit_type', true));
-        update_post_meta($newTemplateId, '_template_config', get_post_meta($templateId, '_template_config', true));
-        update_post_meta($newTemplateId, '_design_template', get_post_meta($templateId, '_design_template', true));
-        update_post_meta($newTemplateId, '_footer_settings', get_post_meta($templateId, '_footer_settings', true));
+        // Meta fields to copy over
+        $metaKeys = [
+            '_email_subject',
+            '_edit_type',
+            '_template_config',
+            '_design_template',
+            '_footer_settings'
+        ];
+
+        // Update post meta in a loop
+        $this->copyMetaFields($templateId, $newTemplateId, $metaKeys);
 
         do_action('fluent_crm/email_template_duplicated', $newTemplateId, $template);
 
@@ -193,6 +210,16 @@ class TemplateController extends Controller
             'message'     => __('Template successfully duplicated', 'fluent-crm'),
             'template_id' => $newTemplateId
         ]);
+    }
+
+    /**
+     * Helper method to copy meta fields from one post to another
+     */
+    protected function copyMetaFields($oldPostId, $newPostId, $metaKeys)
+    {
+        foreach ($metaKeys as $metaKey) {
+            update_post_meta($newPostId, $metaKey, get_post_meta($oldPostId, $metaKey, true));
+        }
     }
 
     public function update(Request $request, $id)
@@ -211,11 +238,11 @@ class TemplateController extends Controller
         }
 
         if(empty($templateData['post_title'])) {
-            $templateData['post_title'] = 'Email template created at '.date('Y-m-d H:i');
+            $templateData['post_title'] = 'Email template created at '.gmdate('Y-m-d H:i');
         }
 
         if(empty($templateData['email_subject'])) {
-            $templateData['email_subject'] = 'Email template created at '.date('Y-m-d H:i');
+            $templateData['email_subject'] = 'Email template created at '.gmdate('Y-m-d H:i');
         }
 
         $postData = Arr::only($templateData, [
@@ -227,7 +254,7 @@ class TemplateController extends Controller
 
 
         $postData['post_modified'] = current_time('mysql');
-        $postData['post_modified_gmt'] = date('Y-m-d H:i:s');
+        $postData['post_modified_gmt'] = gmdate('Y-m-d H:i:s');
         Template::where('ID', $id)->update($postData);
 
         update_post_meta($id, '_email_subject', Arr::get($templateData, 'email_subject'));
@@ -344,5 +371,80 @@ class TemplateController extends Controller
         return [
             'message' => 'Global style settings has been updated'
         ];
+    }
+
+
+    /**
+     * Fetches built-in templates from a WordPress REST API endpoint.
+     *
+     * @return array An array containing information about the templates.
+     */
+    public function getBuiltInTemplates()
+    {
+        $restApi = 'https://fluentcrm.com/wp-json/wp/v2/';
+
+        // Make a GET request to retrieve CRM templates
+        $request = wp_remote_get($restApi.'crm-templates?template_type=email_template', [
+            'sslverify' => false,
+        ]);
+
+        // Check if the request resulted in an error
+        if (is_wp_error($request)) {
+            // Handle error
+            error_log($request->get_error_message());
+            return [];
+        }
+
+        // Decode the JSON response from the request
+        $templateLists = json_decode(wp_remote_retrieve_body($request), true);
+        $formattedTemplates = [];
+
+        foreach ($templateLists as $template) {
+            if (!$template['template_json']) {
+                // Skip if no template json
+                continue;
+            }
+            $mediaURL = '';
+            if ($template['featured_media'] != 0) {
+                $mediaURL = $this->getMediaURL($template['featured_media'], $restApi);
+            }
+            $formattedTemplates[] = [
+                'id'                => $template['id'],
+                'title'             => $template['title']['rendered'],
+                'content'           => $template['template_json'],
+                'short_description' => $template['short_description'],
+                'link'              => $template['link'],
+                'media_url'         => $mediaURL,
+                'status'            => $template['status'],
+            ];
+        }
+
+        // Return a success response with the formatted templates
+        return $this->sendSuccess([
+            'templates' => $formattedTemplates
+        ]);
+    }
+
+
+    /**
+     * Retrieves the full source URL of a media item.
+     *
+     * @param int    $mediaID Media item ID.
+     * @param string $restAPI The base URL of the REST API.
+     *
+     * @return string Full source URL of the media item.
+     */
+    public function getMediaURL($mediaID, $restAPI) {
+        $request = wp_remote_get($restAPI.'media/'.$mediaID);
+
+        // Check for request errors
+        if (is_wp_error($request)) {
+            return '';
+        }
+
+        $image = json_decode($request['body'], true);
+        $img   = Arr::get($image, 'source_url');
+
+        return $img;
     }
 }

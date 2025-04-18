@@ -3,6 +3,7 @@
 namespace FluentCrm\App\Http\Controllers;
 
 use FluentCrm\App\Hooks\Handlers\ActivationHandler;
+use FluentCrm\App\Models\Campaign;
 use FluentCrm\App\Models\CampaignEmail;
 use FluentCrm\App\Models\CampaignUrlMetric;
 use FluentCrm\App\Models\SystemLog;
@@ -379,10 +380,27 @@ class SettingsController extends Controller
                 'doc_url' => 'https://fluentcrm.com/docs/bounce-handling-with-smtp2go/',
                 'input_title' => 'SMTP2Go Bounce Handler Webhook URL',
                 'input_info' => 'Please paste this URL into your SMTP2Go\'s Webhook settings to enable Bounce Handling with FluentCRM'
-            ]
+            ],
+            'brevo' => [
+                'label'       => __('Brevo (ex Sendinblue)', 'fluent-crm'),
+                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/brevo/handle/' . $securityCode),
+                'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-brevo/',
+                'input_title' => __('Brevo Bounce Handler Webhook URL', 'fluent-crm'),
+                'input_info'  => __('Please paste this URL into your Brevo\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
+            ],
         ];
 
         $data = [
+            /**
+             * Determine FluentCRM Bounce Handler settings.
+             *
+             * This filter allows modification of the bounce handler settings.
+             *
+             * @since 2.5.95
+             *
+             * @param array  $bounceSettings The current bounce settings.
+             * @param string $securityCode   The security code for the bounce handler.
+             */
             'bounce_settings' => apply_filters('fluent_crm/bounce_handlers', $bounceSettings, $securityCode)
         ];
 
@@ -538,7 +556,7 @@ class SettingsController extends Controller
         $selectedLogs = $data['selected_logs'];
         $daysBefore = $data['days_before'];
 
-        $refDate = date('Y-m-d 00:00:01', time() - $daysBefore * 86400);
+        $refDate = gmdate('Y-m-d 00:00:01', time() - $daysBefore * 86400);
 
         $dataCounters = [];
         if (in_array('emails', $selectedLogs)) {
@@ -561,7 +579,7 @@ class SettingsController extends Controller
 
         if (in_array('email_open', $selectedLogs)) {
             $dataCounters[] = [
-                'title' => __('Email clicks', 'fluent-crm'),
+                'title' => __('Email Opens', 'fluent-crm'),
                 'count' => CampaignUrlMetric::where('type', 'open')
                     ->where('created_at', '<', $refDate)
                     ->count()
@@ -749,7 +767,7 @@ class SettingsController extends Controller
                         $crmApps[] = [
                             'uuid'    => $password['uuid'],
                             'name'    => $password['name'],
-                            'created' => date('Y-m-d H:i:s', $password['created'])
+                            'created' => gmdate('Y-m-d H:i:s', $password['created'])
                         ];
                     }
                 }
@@ -850,6 +868,16 @@ class SettingsController extends Controller
     {
         $withFields = in_array('fields', $request->get('with', []));
 
+        /**
+         * Determine the deep integration providers for FluentCRM.
+         *
+         * This filter allows modification of the deep integration providers used in FluentCRM such as Woocommerce, Easy Digital Downloads, etc.
+         * 
+         * @since 2.5.1
+         * 
+         * @param array An array of deep integration providers.
+         * @param bool  $withFields Whether to include fields in the integration providers.
+         */
         $deepIntegrationProviders = apply_filters('fluentcrm_deep_integration_providers', [], $withFields);
 
         return [
@@ -864,8 +892,28 @@ class SettingsController extends Controller
         $data = $request->all();
 
         if ($action == 'sync') {
+            /**
+             * Determine whether to allow deep integration sync for a specific provider.
+             *
+             * This filter allows you to modify the result of the deep integration sync for a given provider.
+             *
+             * @since 2.5.1
+             *
+             * @param mixed  The result of the integration sync. Default false. Expected to be a boolean.
+             * @param array  $data     The data to be synced.
+             */
             $result = apply_filters('fluentcrm_deep_integration_sync_' . $provider, false, $data);
         } else {
+            /**
+             * Determine the result of saving deep integration settings for a specific provider.
+             *
+             * The dynamic portion of the hook name, `$provider`, refers to the specific integration provider.
+             *
+             * @since 2.5.1
+             *
+             * @param mixed  The result of the save operation. Default false. Expected to be a boolean.
+             * @param array  $data    The data being saved.
+             */
             $result = apply_filters('fluentcrm_deep_integration_save_' . $provider, false, $data);
         }
 
@@ -898,7 +946,11 @@ class SettingsController extends Controller
             $data[$key] = sanitize_text_field($datum);
         }
 
-        update_option('_fluentcrm_compliance_settings', $data, 'no');
+        $result = update_option('_fluentcrm_compliance_settings', $data, 'no');
+
+        if ($result) {
+            do_action('fluent_crm/sync_subscriber_delete_setting', 'compliance_settings', $data['delete_contact_on_user']);
+        }
 
         return [
             'message'  => __('Settings has been successfully updated'),
@@ -919,7 +971,11 @@ class SettingsController extends Controller
         $data = Arr::only($request->all(), array_keys(Helper::getExperimentalSettings()));
 
         foreach ($data as $key => $datum) {
-            $data[$key] = sanitize_text_field($datum);
+            if ($key === 'campaign_ids' && is_array($datum)) {
+                $data[$key] = array_map('intval', $datum);
+            } else {
+                $data[$key] = sanitize_text_field($datum);
+            }
         }
 
         if (Arr::get($data, 'company_module') == 'yes') {
@@ -936,6 +992,15 @@ class SettingsController extends Controller
 
         return [
             'message' => __('Settings has been updated', 'fluent-crm')
+        ];
+    }
+
+    public function getCampaigns(Request $request)
+    {
+        $campaigns = Campaign::orderBy('id', 'DESC')->get();
+
+        return [
+            'campaigns' => $campaigns
         ];
     }
 

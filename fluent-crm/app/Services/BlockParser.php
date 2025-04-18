@@ -202,13 +202,6 @@ class BlockParser
         $align = Arr::get($block, 'attrs.layout.justifyContent', 'left');
         $tableCssClass = 'fce_row fce_buttons_row';
 
-        $width = 'auto';
-        if ($align == 'right' || $alignment == 'center') {
-            $width = '100%';
-        } else if (Arr::get($block, 'innerBlocks.0.attrs.width') == 100) {
-            $width = '100%';
-        }
-
         $tableCssClass .= ' tb_btn_' . $alignment;
 
         if ($definedWidth = Arr::get($block, 'innerBlocks.0.attrs.width')) {
@@ -233,13 +226,29 @@ class BlockParser
             }
         }
 
-        return '<table valign="middle" align="' . $align . '" class="' . $tableCssClass . '" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed; border-collapse: collapse;mso-table-lspace: 0pt;mso-table-rspace: 0pt;-ms-text-size-adjust: 100%;-webkit-text-size-adjust: 100%; width: ' . $width . '; float:none;' . $extraStyle . '"><tbody><tr>';
+        return '<table valign="middle" align="' . $align . '" class="' . $tableCssClass . '" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed; border-collapse: collapse;mso-table-lspace: 0pt;mso-table-rspace: 0pt;-ms-text-size-adjust: 100%;-webkit-text-size-adjust: 100%; float:none;' . $extraStyle . '"><tbody><tr>';
     }
 
     private function getButtonWrapper($content, $data)
     {
         $defaultClass = Arr::get($data, 'attrs.className', '');
         $backgroundColor = Arr::get($data, 'attrs.style.color.background');
+
+        $typoTextTransform = Arr::get($data, 'attrs.style.typography.textTransform');
+        $typoFontWeight = Arr::get($data, 'attrs.style.typography.fontWeight');
+        $typoFontStyle = Arr::get($data, 'attrs.style.typography.fontStyle');
+
+        $typography = '';
+        if ($typoTextTransform) {
+            $typography .= 'text-transform: ' . $typoTextTransform . ';';
+        }
+        if ($typoFontWeight) {
+            $typography .= 'font-weight: ' . $typoFontWeight . ';';
+        }
+        if ($typoFontStyle) {
+            $typography .= 'font-style: ' . $typoFontStyle . ';';
+        }
+
         if (!$backgroundColor) {
             $bgClass = Arr::get($data, 'attrs.backgroundColor');
             $backgroundColor = Helper::getColorSchemeValue($bgClass);
@@ -268,11 +277,15 @@ class BlockParser
 
         $content = trim(preg_replace("/<\/?div[^>]*\>/i", "", $content));
 
-        $td = '<td class="fc_btn ' . trim($btn_wrapper_class) . '" align="center" style="border-radius: ' . $borderRadius . ';" bgcolor="' . $backgroundColor . '" border-radius="30px">';
+        if (Arr::get($data, 'attrs.fontSize')) {
+            $btn_wrapper_class .= ' has-' . Helper::kebabCase(Arr::get($data, 'attrs.fontSize')) . '-font-size ';
+        }
+
+        $td = '<td class="fc_btn ' . trim($btn_wrapper_class) . '" align="center" style="' . $typography . ' border-radius: ' . $borderRadius . ';" bgcolor="' . $backgroundColor . '" border-radius="30px">';
 
         $align = Arr::get($data, 'parent_attrs.parent_attrs.layout.justifyContent', 'center');
 
-        $alignment = $align == 'center' ? 'text-align: -webkit-center' : ' ';
+        $alignment = $align == 'center' ? 'text-align: -webkit-center;' : ' ';
 
         return '<td style="padding-right: 10px;' . $alignment . '" align="' . $align . '" valign="middle" class="fce_column"><table style="margin-bottom: 4px; margin-top: 4px;" border="0" cellspacing="0" cellpadding="0"><tr>' . $td . $content . '</td></tr></table></td>';
     }
@@ -286,6 +299,16 @@ class BlockParser
     {
         $subscriber = BlockParserHelper::getSubscriber();
         if (!$subscriber) {
+            /**
+             * Filter the current subscriber while rendering the Conditional Block in FluentCRM.
+             *
+             * This filter allows you to modify the subscriber object used in the current block condition.
+             *
+             * @since 2.8.44
+             *
+             * @param object $subscriber The current subscriber object.
+             * @return object The modified subscriber object.
+             */
             $subscriber = apply_filters('fluent_crm/get_current_block_condition_subscriber', $subscriber);
         }
 

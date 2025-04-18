@@ -246,6 +246,45 @@ class FormsController extends Controller
 
     public function getTemplates()
     {
+        /**
+         * Define the form templates for FluentCRM Forms(Fluent Forms).
+         *
+         * This filter allows customization of the Fluent Forms templates used in FluentCRM.
+         *
+         * @since 2.7.0
+         *
+         * @param array {
+         *     An array of form templates.
+         *
+         *     @type array $inline_subscribe {
+         *         Inline Opt-in Form template.
+         *         @type string $label       The label for the form.
+         *         @type string $image       The URL of the form image.
+         *         @type string $id          The ID of the form.
+         *         @type string $form_fields The JSON string of form fields.
+         *         @type string $custom_css  The custom CSS for the form.
+         *         @type array  $map_fields  The mapping of form fields.
+         *     }
+         *     @type array $simple_optin {
+         *         Simple Opt-in Form template.
+         *         @type string $label       The label for the form.
+         *         @type string $image       The URL of the form image.
+         *         @type string $id          The ID of the form.
+         *         @type string $form_fields The JSON string of form fields.
+         *         @type string $custom_css  The custom CSS for the form.
+         *         @type array  $map_fields  The mapping of form fields.
+         *     }
+         *     @type array $with_name_subscribe {
+         *         Subscription Form template.
+         *         @type string $label       The label for the form.
+         *         @type string $image       The URL of the form image.
+         *         @type string $id          The ID of the form.
+         *         @type string $form_fields The JSON string of form fields.
+         *         @type string $custom_css  The custom CSS for the form.
+         *         @type array  $map_fields  The mapping of form fields.
+         *     }
+         * }
+         */
         return apply_filters('fluent_crm/ff_form_templates', [
             'inline_subscribe'    => [
                 'label'       => __('Inline Opt-in Form', 'fluent-crm'),

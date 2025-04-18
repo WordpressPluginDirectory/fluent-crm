@@ -42,7 +42,7 @@ class Integrations
     {
         wp_register_script(
             'fluentcrm-blocks-block-editor',
-            fluentCrmMix('block_editor/fluent_conditional_block.js'),
+            apply_filters('fluent_crm/fluent_conditional_block_js_url', fluentCrmMix('block_editor/fluent_conditional_block.js')),
             ['wp-blocks', 'wp-element', 'wp-editor'],
             FLUENTCRM_PLUGIN_VERSION
         );
@@ -53,7 +53,7 @@ class Integrations
 
         wp_register_style(
             'fluentcrm-blocks-block-editor',
-            fluentCrmMix('block_editor/fluent_conditional_block.css'),
+            apply_filters('fluent_crm/fluent_conditional_block_css_url', fluentCrmMix('block_editor/fluent_conditional_block.css')),
             array(),
             FLUENTCRM_PLUGIN_VERSION
         );

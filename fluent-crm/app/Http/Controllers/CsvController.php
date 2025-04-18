@@ -82,6 +82,15 @@ class CsvController extends Controller
 
         $maps = [];
 
+        $customFields = fluentcrm_get_custom_contact_fields();
+
+        $fieldsMap = [];
+        if ($customFields) {
+            foreach ($customFields as $field) {
+                $fieldsMap[$field['slug']] = $field['label'];
+            }
+        }
+
         foreach ($headerItems as $headerItem) {
             $tableMap = (in_array($headerItem, $subscriberColumns)) ? $headerItem : null;
 
@@ -92,6 +101,10 @@ class CsvController extends Controller
                 }
             }
 
+            if (!empty($fieldsMap) && in_array($headerItem, $fieldsMap)) {
+                $tableMap = array_search($headerItem, $fieldsMap);
+            }
+
             $maps[] = [
                 'csv'   => $headerItem,
                 'table' => $tableMap
@@ -99,10 +112,28 @@ class CsvController extends Controller
         }
 
         if ($request->get('type') == 'company') {
+            /**
+             * Determine the columns of the company table in FluentCRM.
+             *
+             * This filter allows you to modify the columns of the company table in the CSV export.
+             *
+             * @since 2.8.0
+             *
+             * @param array $subscriberColumns An array of default subscriber columns.
+             */
             $columns = apply_filters(
                 'fluent_crm/company_table_columns', $subscriberColumns
             );
         } else {
+            /**
+             * Determine the columns of the subscriber table in FluentCRM.
+             *
+             * This filter allows you to modify the columns displayed in the subscriber table.
+             *
+             * @since 2.8.0
+             *
+             * @param array $subscriberColumns An array of default subscriber table columns.
+             */
             $columns = apply_filters(
                 'fluent_crm/subscriber_table_columns', $subscriberColumns
             );

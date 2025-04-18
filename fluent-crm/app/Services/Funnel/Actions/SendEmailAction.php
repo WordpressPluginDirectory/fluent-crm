@@ -246,6 +246,7 @@ class SendEmailAction extends BaseAction
             do_action('fluentcrm_process_contact_jobs', $subscriber);
         } else if ($customAddresses = Arr::get($settings, 'send_email_custom')) {
             $customAddresses = array_map('trim', explode(',', $customAddresses));
+            $customAddresses = apply_filters('fluent_crm/parse_campaign_email_text', $customAddresses, $subscriber);
             $campaign->sendToCustomAddresses($customAddresses, $args, $subscriber);
         }
     }

@@ -91,6 +91,15 @@ class ContactsQuery
         }
 
         if ($this->args['has_commerce']) {
+            /**
+             * Filter the commerce provider for quering contacts in FluentCRM.
+             *
+             * This filter allows you to modify the commerce provider used in the Contact Query.
+             *
+             * @since 2.5.1
+             *
+             * @param string The commerce provider.
+             */
             $commerceProvider = apply_filters('fluentcrm_commerce_provider', '');
             if ($commerceProvider) {
                 $subscribersQuery->with(['commerce_by_provider' => function ($query) use ($commerceProvider) {

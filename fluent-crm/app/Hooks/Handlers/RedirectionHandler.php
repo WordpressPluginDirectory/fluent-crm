@@ -93,6 +93,16 @@ class RedirectionHandler
 
         $tokenVerified = false;
 
+        /**
+         * Filter whether to use cookies for FluentCRM redirection.
+         *
+         * This filter allows you to control whether cookies should be used for tracking
+         * FluentCRM redirection. By default, it is set to true.
+         *
+         * @since 2.8.44
+         *
+         * @param bool Whether to use cookies for redirection. Default true.
+         */
         if (apply_filters('fluent_crm/will_use_cookie', true) && !empty($urlData->url_token)) {
             // validate the URL token here
             if (substr($campaignEmail->email_hash, 0, 8) == $urlData->url_token) {

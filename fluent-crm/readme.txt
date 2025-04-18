@@ -2,9 +2,9 @@
 Contributors: techjewel,adreastrian,heera,wpmanageninja
 Tags: email marketing, newsletter, crm, email newsletter, subscribers
 Requires at least: 5.0
-Tested up to: 6.6
-Requires PHP: 7.1
-Stable tag: 2.9.24
+Tested up to: 6.8
+Requires PHP: 7.3
+Stable tag: 2.9.50
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -130,8 +130,6 @@ FluentCRM is a self-hosted WordPress plugin. You own your data, and no external 
 >Finally, an email marketing solution that looks native to the WordPress user interface and is super easy to use. Ideal for beginners to quickly get started with email lead generation to advanced users wanting to set up funnels with advanced tagging.
 
 = FluentCRM Review by Experts =
-
-[youtube https://www.youtube.com/watch?v=Yl2f_UqLxwU]
 
 [youtube https://www.youtube.com/watch?v=Vl3Tybe73e8]
 
@@ -260,6 +258,146 @@ You can report any security bugs found in the source code of FluentCRM plugins t
 10. Pro Integrations
 
 == Changelog ==
+
+= 2.9.50 (Date: April 17, 2025) =
+New: Shortcode support for multiple email campaign archives
+New: Shortcodes are now searchable
+New: Voxel Integration ( Product purchase history in contact )
+New: IPv6 compatibility Added
+Improvement: WordPress version 6.8 compatible
+Improvement: Toggle for column visibility in automation funnels table
+Improvement: Unsaved changes warning in block editor
+Improvement: More translations string added
+Improvement: Search functionality for System Logs
+Fixed: Global footer displaying incorrectly in email previews
+Fixed: Custom field values couldn't be cleared once set
+Fixed: Custom email footer settings import issue
+Fixed: Encoding issue in Custom Field Text
+Fixed: Label search functionality errors
+Fixed: Fatal error during funnel import process
+Fixed: AB Cart Tag and list not removing after order completion
+
+= 2.9.48 (Date: March 20, 2025) =
+New: Re-apply Option for Completed Sequence
+New: Tags and Lists are now searchable in Dynamic Selection
+New: Selectable Custom Fields now Editable & Sortable
+New: Smartcodes for WooCommerce Subscription Triggers
+Improvement: Added Copy email and phone from contact lists
+Improvement: Tags and lists display in ascending order
+Improvement: LearnPress course finished hook Updated
+Improvement: LatestPostBlock now displays all custom post types
+improvement: Added currency to Shipping and Tax Total
+Improvement: Introduced Filter to manage new bounced email
+Improvement: Tags and subscriber lists now sorted in ascending order
+Improvement: Added operator type selection for taxonomy filters in LatestPost Block
+Fixed: Padding, Margin, and Line-Height issues inside Column block
+Fixed: Dynamic coupon amount issue with existing template
+Fixed: Excerpt length of LatestPostBlock issue
+Fixed: UpdateContactProperty Action float subtraction issue
+Other Improvements & Bug Fixes
+
+= 2.9.45 (Date: February 24, 2025) =
+New: Subscription Cancelled Trigger (Fluent Forms)
+New: Subscription Payment Received Trigger (Fluent Forms)
+New: FluentForm Subscriptions Widget in Contact Profile
+New: Update Custom Fields Using Bulk Actions
+New: Filter option for failed emails
+New: Show non-recurring memberships in MemberPress Widget
+New: Woo Subscription Cancelled trigger
+New: Option to sort custom fields
+New: Wishlist Membership Widget in Contact Profile
+Improvement: The slug retains one character even after the title is cleared
+Improvement: Display which user sent the campaign
+Improvement: All tables with adjustable column widths
+Improvement: Redesigned the Addons section with improved UI/UX
+Improvement: Added tooltip for Skipped AB cart status
+Improvement: Added a button to copy the bounce handler URL
+Fixed: Custom numeric field filter issue
+Fixed: WooCommerce Coupon Discount amount not working
+Other Improvements & Bug Fixes
+
+= 2.9.40 (Date: January 22, 2025) =
+New: Quick Search in Automation Actions, Benchmarks, Goals
+New: MemberPress Subscriptions Widget
+New: Export/Import Email Campaign
+New: Export/Import Email Campaign Contacts
+New: Brevo (ex Sendinblue) Bounce Handler
+New: Support for Polish Characters in slug (Tags/Lists)
+Improvement: Contact filtering options: Never Clicked/Opened
+Improvement: Quick preview added in email templates
+Improvement: Post Image Type for Latest Post block
+Improvement: Current date in Update Contact Property action in Automation
+Improvement: WooCommerce Product Image Styling (order_items_table)
+Improvement: Back Button for Campaign Archives
+Improvement: Restart section added in ‘Remove From List’ Trigger
+Improvement: Added 'Check All' option contact exporter
+Improvement: More Filters in email campaign archive
+Improvement: Added ‘Select All’ tag/list option while importing contacts
+Improvement: UI Improvements (Automation Label Color)
+Improvement: Smoother One-click Unsubscribe
+Improvement: Coupon systems support for multi-vendor/extensions along with woocommerce
+Improvement: Added Gravatar & Fallback Compliance for Contact Avatar
+Fixed: Spammed/Complained Status Issue in Bounce Handler
+Fixed: Theme colors not displaying in Emails
+Fixed: Pagination for recurring campaign emails
+Fixed: Sync WooCommerce order (trashed order issue)
+
+
+= 2.9.31 (Date: December 27, 2024) =
+New: Added Email Preview in Campaigns
+Improvement: AB Cart item table responsive
+Improvement: User delete option sync between compliance settings and general settings
+Improvement: Replaced google fonts with Bunny
+Fixed: AB Cart Recovered Revenue issue
+Fixed: Campaigns revenue report issue
+Fixed: Latest Post Block random sort issue
+Fixed: Table alignment issue in blocks
+Fixed: Number values in the 'Text' custom field misinterpreted as date issue.
+Fixed: Variable button size not working in block editor
+Fixed: MailChimp Migration import limitations
+Fixed: Theme & default color issue in editor
+Other Improvements & Bug Fixes
+
+
+= 2.9.30 (Date: December 09, 2024) =
+New: Labels in Automations & Campaign
+New: WordPress date format support in Custom Field
+New: Test Outgoing Webhook functionality
+Improvement: UI enhancements for Lists & Tags popover
+Improvement: Corrected date handling
+Improvement: Auto-Mapping CSV Fields with Custom Fields
+Improvement: Better SQL Queries
+Improvement: Users now searchable in manager settings
+Fixed: Default link color issue while editing the email template
+Fixed: Default values not working for Smartcode (manage_subscription_html, unsubscribe_html)
+Fixed: Ordering in Dashboard Chart
+Fixed: Campaign Revenue Report issues
+Fixed: URL decode issue in A/B Testing for Campaigns
+Fixed: Some Deprecation Warnings
+Other Improvements & Bug Fixes
+
+= 2.9.25 (Date: October 16, 2024) =
+- New: Export/Import Recurring Campaign
+- New: Smart Code support in Custom Email Address field
+- New: Customer Profile button for EDD
+- New: Added internal description to the funnels page
+- Improvement: Product Image  & Currency Added in Ab Cart Details/Email
+- Improvement: Multiline Custom Field
+- Improvement: UX in Latest Post Block
+- Improvement: Added tax row in Abandoned Cart
+- Improvement: Abandoned Cart Details Mobile Responsiveness
+- Improvement: Sorting Option in Purchase History in Contact for Woo/EDD
+- Improvement: Changing product now possible from block sidebar
+- Fixed: URL encoding Issue
+- Fixed: Automation Wait Delay Issue
+- Fixed: Dashboard Chat Dates Order
+- Fixed: Email Editor LetterCase
+- Fixed: Company Custom Field CSV Import Issue
+- Fixed: Company Custom Field Issue while creating
+- Fixed: Smart Code wp.url Issue
+- Fixed: Ab Cart Smart Code Issue
+- Fixed: MemberPress Contact Import Issue
+- Other Improvements & Bug Fixes
 
 = 2.9.24 (Date: August 20, 2024) =
 - Hotfix: Compatibility issues fixed for Email Editor with some woo addons

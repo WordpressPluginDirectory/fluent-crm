@@ -59,7 +59,7 @@ class MailChimpMigrator extends BaseMigrator
     public function getListTagMappings($postedData)
     {
         $api = $this->getApi($postedData['credential']);
-        $lists = $api->get('lists');
+        $lists = $api->get('lists', ['count' => 9999]);
         $formattedLists = [];
 
         foreach ($lists['lists'] as $list) {

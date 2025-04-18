@@ -151,10 +151,10 @@ class ConditionAssessor
                     break;
                 case 'in':
                     $dataValue = (array)$dataValue;
-                    if (is_array($sourceValue)) {
-                        return !!(array_intersect($sourceValue, $dataValue));
+                    if (!is_array($sourceValue)) {
+                        $sourceValue = array_map('trim', explode(',', $sourceValue));
                     }
-                    return in_array($sourceValue, $dataValue);
+                    return !!array_intersect($sourceValue, $dataValue);
                 case 'not_in':
                     $dataValue = (array)$dataValue;
                     if (is_array($sourceValue)) {

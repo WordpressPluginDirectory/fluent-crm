@@ -61,6 +61,8 @@ class ComposerStaticInit3ec9aaa182e9c7febe2801c6e81775d2
         'FluentCrmMigrations\\SubscriberPivot' => __DIR__ . '/../..' . '/database/migrations/SubscriberPivot.php',
         'FluentCrmMigrations\\Subscribers' => __DIR__ . '/../..' . '/database/migrations/Subscribers.php',
         'FluentCrmMigrations\\Tags' => __DIR__ . '/../..' . '/database/migrations/Tags.php',
+        'FluentCrmMigrations\\TermRelations' => __DIR__ . '/../..' . '/database/migrations/TermRelations.php',
+        'FluentCrmMigrations\\Terms' => __DIR__ . '/../..' . '/database/migrations/Terms.php',
         'FluentCrmMigrations\\UrlStores' => __DIR__ . '/../..' . '/database/migrations/UrlStores.php',
     );
 

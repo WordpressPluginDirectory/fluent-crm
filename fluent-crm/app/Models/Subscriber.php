@@ -81,13 +81,23 @@ class Subscriber extends Model
                 }
 
                 if ($user) {
-                    if ($model->first_name) {
+                    if ($model->first_name && $model->last_name != $user->first_name) {
                         update_user_meta($user->ID, 'first_name', $model->first_name);
                     }
-                    if ($model->last_name) {
+                    if ($model->last_name && $model->last_name != $user->last_name) {
                         update_user_meta($user->ID, 'last_name', $model->last_name);
                     }
 
+                    /**
+                     * Determine whether to update the WordPress user email when there is a mismatch.
+                     *
+                     * This filter allows you to control whether the WordPress user email should be updated
+                     * when there is a mismatch between the subscriber email and the WordPress user email.
+                     *
+                     * @since 2.3.1
+                     *
+                     * @param bool Whether to update the WordPress user email. Default false.
+                     */
                     if ($email_mismatch && apply_filters('fluentcrm_update_wp_user_email_on_change', false)) {
                         $user->user_email = $model->email;
                         wp_update_user($user);
@@ -320,6 +330,7 @@ class Subscriber extends Model
         )
             ->wherePivot('object_type', $class)
             ->withPivot('object_type')
+            ->orderBy('title', 'ASC')
             ->withTimestamps();
     }
 
@@ -492,6 +503,7 @@ class Subscriber extends Model
         )
             ->wherePivot('object_type', $class)
             ->withPivot('object_type')
+            ->orderBy('title', 'ASC')
             ->withTimestamps();
     }
 
@@ -1002,7 +1014,7 @@ class Subscriber extends Model
                 $subscriberData['status'] = $status;
             } else if ($exist && $exist->status == 'subscribed') {
                 unset($subscriberData['status']);
-            } else if ($exist && in_array($exist->status, ['bounced', 'complained'])) {
+            } else if ($exist && in_array($exist->status, ['bounced', 'complained', 'spammed'])) {
                 unset($subscriberData['status']);
             } else {
                 $subscriberData['status'] = $status;
@@ -1047,15 +1059,19 @@ class Subscriber extends Model
             $customFieldsChanges = $exist->syncCustomFieldValues($customValues, $deleteOtherValues);
         }
 
+        /*
+         * TODO: investigate this attachTags and attachLists method. for Masiur
+         */
+        // Syncing Lists
+        if ($lists) {
+            $exist->attachLists($lists);
+        }
+
         // Syncing Tags
         if ($tags) {
             $exist->attachTags($tags);
         }
 
-        // Syncing Lists
-        if ($lists) {
-            $exist->attachLists($lists);
-        }
 
         if (Helper::isCompanyEnabled()) {
             $companyId = $exist->company_id;
@@ -1127,6 +1143,7 @@ class Subscriber extends Model
 
         $listIds = Sanitize::sanitizeListIds($listIds);
 
+        $this->load('lists');
         $existingLists = $this->lists;
         $existingListIds = [];
         foreach ($existingLists as $list) {
@@ -1167,6 +1184,7 @@ class Subscriber extends Model
 
         $tagIds = Sanitize::sanitizeTagIds($tagIds);
 
+        $this->load('tags');
         $existingTags = $this->tags;
         $existingTagIds = [];
         foreach ($existingTags as $tag) {
@@ -1205,6 +1223,8 @@ class Subscriber extends Model
         if (!$companyIds) {
             return $this;
         }
+
+        $this->load('companies');
 
         $existingCompanies = $this->companies;
         $existingCompanyIds = [];
@@ -1247,6 +1267,8 @@ class Subscriber extends Model
 
         $listIds = Sanitize::sanitizeListIds($listIds, false);
 
+        $this->load('lists');
+
         $existingLists = $this->lists;
         $existingListIds = [];
         foreach ($existingLists as $list) {
@@ -1278,6 +1300,8 @@ class Subscriber extends Model
 
         $tagsIds = Sanitize::sanitizeTagIds($tagsIds, false);
 
+        $this->load('tags');
+
         $existingTags = $this->tags;
         $existingTagIds = [];
         foreach ($existingTags as $tag) {
@@ -1306,6 +1330,9 @@ class Subscriber extends Model
         if (!$companyIds) {
             return $this;
         }
+
+
+        $this->load('companies');
 
         $existingCompanies = $this->companies;
         $existingCompanyIds = [];
@@ -1356,6 +1383,8 @@ class Subscriber extends Model
 
         $tagIds = Sanitize::sanitizeTagIds($tagIds, false);
 
+        $this->load('tags');
+
         foreach ($this->tags as $tag) {
             if (in_array($tag->id, $tagIds)) {
                 return true;
@@ -1371,6 +1400,8 @@ class Subscriber extends Model
         }
 
         $listIds = Sanitize::sanitizeListIds($listIds, false);
+
+        $this->load('lists');
 
         foreach ($this->lists as $list) {
             if (in_array($list->id, $listIds)) {
@@ -1477,7 +1508,7 @@ class Subscriber extends Model
 
         if (in_array($operator, $exactOperators)) {
             if ($operator == '>' || $operator == '<') {
-                $filter['value'] = (int)$filter['value'];
+                $filter['value'] = (float)$filter['value'];
             } else {
                 $filter['value'] = sanitize_text_field($filter['value']);
             }
@@ -1909,7 +1940,7 @@ class Subscriber extends Model
                         return $subQuery->select(fluentCrmDb()->raw(1))
                             ->from('usermeta')
                             ->whereRaw("{$wpdb->prefix}usermeta.user_id = {$wpdb->prefix}users.ID")
-                            ->where('usermeta.meta_key', '=', 'wp_capabilities')
+                            ->where('usermeta.meta_key', '=', $wpdb->prefix . 'capabilities')
                             ->where('usermeta.meta_value', 'LIKE', '%"' . $userRole . '"%');
                     });
                 });
@@ -2070,7 +2101,7 @@ class Subscriber extends Model
     public function buildActivitiesFilterQuery($query, $filters)
     {
         foreach ($filters as $filter) {
-            if (empty($filter['value'])) {
+            if (empty($filter['value']) && $filter['property'] !== 'email_opened' && $filter['property'] !== 'email_link_clicked') {
                 continue;
             }
 
@@ -2086,6 +2117,20 @@ class Subscriber extends Model
             ];
 
             $filterProp = $filter['property'];
+
+            if ($filterProp == 'email_opened' && $filter['operator'] == 'never') {
+                $query->whereDoesntHave('campaignEmails', function ($q) {
+                    $q->where('is_open', 1);
+                });
+                continue;
+            }
+
+            if ($filterProp == 'email_link_clicked' && $filter['operator'] == 'never') {
+                $query->whereDoesntHave('campaignEmails', function ($q) {
+                    $q->whereNotNull('click_counter');
+                });
+                continue;
+            }
 
             if ($filterProp == 'campaign_email_activity') {
                 $campaignId = (int)$filter['value'];

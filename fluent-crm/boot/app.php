@@ -101,6 +101,13 @@ return function ($file) {
         }
 
         /*
+         * The below schedule is powered by Action Scheduler by WooCommerce
+         * It will run every day.
+         */
+        if (false === as_next_scheduled_action( 'fluent_crm_ascheduler_runs_daily' ) ) {
+            as_schedule_recurring_action( strtotime('midnight today'), DAY_IN_SECONDS, 'fluent_crm_ascheduler_runs_daily', [], 'fluent-crm' );
+        }
+        /*
          *
          * @todo: Handle Duplicate Schedules and we can remove this code at the end of October 2024
          */

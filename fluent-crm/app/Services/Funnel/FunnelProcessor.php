@@ -65,6 +65,10 @@ class FunnelProcessor
 
     public function startFunnelSequence($funnel, $subscriberData, $funnelSubArgs = [], $subscriber = false)
     {
+        if (isset($subscriberData['email'])) {
+            $subscriber = Subscriber::where('email', $subscriberData['email'])->first();
+        }
+
         if (!$subscriber) {
             // it's new so let's create new subscriber
             $subscriber = FunnelHelper::createOrUpdateContact($subscriberData);
@@ -74,7 +78,7 @@ class FunnelProcessor
             }
         }
 
-        if ($subscriber->status == 'pending' || $subscriber->status == 'unsubscribed') {
+        if ($subscriber->status == 'pending') {
             $subscriber->sendDoubleOptinEmail();
         }
 
@@ -232,7 +236,9 @@ class FunnelProcessor
     {
         update_option('_fc_last_funnel_processor_ran', time(), 'no');
 
-        $jobs = FunnelSubscriber::where('status', 'active')
+        $statuses = apply_filters('fluent_crm/funnel_subscriber_statuses', ['active']);
+
+        $jobs = FunnelSubscriber::whereIn('status', $statuses)
             ->whereHas('funnel', function ($q) {
                 return $q->where('status', 'published');
             })

@@ -169,7 +169,6 @@ class Sanitize
             }
 
             if ($customFieldKeys) {
-                $customValues = array_filter(Arr::only($customValues, $customFieldKeys));
                 if ($customValues) {
                     $customValues = (new CustomCompanyField)->formatCustomFieldValues($customValues);
                 }

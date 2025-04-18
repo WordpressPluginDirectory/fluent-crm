@@ -26,19 +26,19 @@ class ActiveCampaignMigrator extends BaseMigrator
             ],
             'field_map_info'         => __('Email and main contact fields will be mapped automatically', 'fluent-crm'),
             'credential_fields'      => [
-                'api_key' => [
-                    'label'       => __('API Token', 'fluent-crm'),
-                    'placeholder' => __('ActiveCampaign API Token', 'fluent-crm'),
-                    'data_type'   => 'password',
-                    'type'        => 'input-text',
-                    'inline_help' => __('You can find your API key at ActiveCampaign Settings -> Developer', 'fluent-crm')
-                ],
                 'api_url' => [
                     'label'       => __('API Access URL', 'fluent-crm'),
                     'placeholder' => __('API Access URL', 'fluent-crm'),
                     'data_type'   => 'url',
                     'type'        => 'input-text',
                     'inline_help' => __('You can find Account ID Settings -> Developer -> API Access', 'fluent-crm')
+                ],
+                'api_key' => [
+                    'label'       => __('API Access Key', 'fluent-crm'),
+                    'placeholder' => __('ActiveCampaign API Token', 'fluent-crm'),
+                    'data_type'   => 'password',
+                    'type'        => 'input-text',
+                    'inline_help' => __('You can find your API key at ActiveCampaign Settings -> Developer -> API Access', 'fluent-crm')
                 ]
             ],
             'refresh_on_list_change' => false,
