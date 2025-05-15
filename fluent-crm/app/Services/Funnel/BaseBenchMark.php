@@ -23,6 +23,9 @@ abstract class BaseBenchMark
 
         add_action('fluentcrm_funnel_benchmark_start_' . $this->triggerName, array($this, 'handle'), $this->priority, 2);
 
+
+        add_filter('fluent_crm/benchmark_already_asserted_'.$this->triggerName, [$this, 'assertCurrentGoalState'], 10, 3);
+
         add_filter('fluentcrm_funnel_arg_num_' . $this->triggerName, function ($num) {
             if ($num >= $this->actionArgNum) {
                 return $num;
@@ -99,6 +102,11 @@ abstract class BaseBenchMark
             'type'        => 'yes_no_check',
             'check_label' => __('Contacts can enter directly to this sequence point. If you enable this then any contact meet with goal will enter in this goal point.', 'fluent-crm')
         ];
+    }
+
+    public function assertCurrentGoalState($asserted, $benchmark, $funnelSubscriber)
+    {
+        return $asserted;
     }
 
     abstract public function getBlock();

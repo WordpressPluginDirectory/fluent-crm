@@ -335,7 +335,7 @@ class ShortcodeParser
 
                 $formattedValue = date_i18n($date_format, $timestamp);
             }
-            $formattedValue = htmlspecialchars($formattedValue, ENT_QUOTES, 'UTF-8');
+//            $formattedValue =  htmlspecialchars($formattedValue, ENT_QUOTES, 'UTF-8');
             return $formattedValue;
         }
 

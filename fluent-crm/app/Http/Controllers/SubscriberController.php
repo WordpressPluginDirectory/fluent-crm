@@ -116,9 +116,9 @@ class SubscriberController extends Controller
              *
              * This filter allows you to modify the commerce provider used in FluentCRM.
              *
+             * @param string The current commerce provider.
              * @since 2.5.1
              *
-             * @param string The current commerce provider.
              */
             $commerceProvider = apply_filters('fluentcrm_commerce_provider', '');
             if ($commerceProvider) {
@@ -128,12 +128,12 @@ class SubscriberController extends Controller
                  * This filter allows modification of the purchase statistics for a given subscriber
                  * based on the specified commerce provider.
                  *
-                 * @since 2.7.0
-                 *
                  * @param array  The current purchase statistics for the subscriber.
-                 * @param int    $subscriber_id    The ID of the subscriber.
+                 * @param int $subscriber_id The ID of the subscriber.
                  *
                  * @return array Modified purchase statistics for the subscriber.
+                 * @since 2.7.0
+                 *
                  */
                 $subscriber->commerce_stat = apply_filters('fluent_crm/contact_purchase_stat_' . $commerceProvider, [], $subscriber->id);
             }
@@ -379,6 +379,59 @@ class SubscriberController extends Controller
         ], 422);
     }
 
+    public function bulkAddUpdate(Request $request)
+    {
+        $contacts = $request->getJson('contacts', []);
+        $invalids = [];
+        $created = [];
+        $updated = [];
+
+        $double_optin = filter_var($request->get('double_optin'), FILTER_VALIDATE_BOOLEAN);
+        $forceUpdate = filter_var($request->get('force_update'), FILTER_VALIDATE_BOOLEAN);
+
+        foreach ($contacts as $contact) {
+            $contactData = Sanitize::contact($contact);
+            if (empty($contactData['email']) || !is_email($contactData['email'])) {
+                $invalids[] = $contactData;
+                continue;
+            }
+
+            $contactData['tags'] = Arr::get($contact, 'tags', []);
+            $contactData['lists'] = Arr::get($contact, 'lists', []);
+            $createdContact = FluentCrmApi('contacts')->createOrUpdate($contactData, $forceUpdate, false);
+
+            if (!$createdContact) {
+                $invalids[] = $contactData;
+                continue;
+            }
+
+            if ($createdContact->status == 'pending' && $double_optin) {
+                $createdContact->sendDoubleOptinEmail();
+            }
+
+            if ($contact->wasRecentlyCreated) {
+                $created[] = [
+                    'id'     => $createdContact->id,
+                    'email'  => $createdContact->email,
+                    'status' => $createdContact->status,
+                ];
+            } else {
+                $updated[] = [
+                    'id'     => $createdContact->id,
+                    'email'  => $createdContact->email,
+                    'status' => $createdContact->status,
+                ];
+            }
+        }
+
+        return [
+            'message'  => __('Successfully added/updated the subscribers.', 'fluent-crm'),
+            'created'  => $created,
+            'updated'  => $updated,
+            'invalids' => $invalids
+        ];
+    }
+
     public function updateSubscriber(Request $request, $id)
     {
         $subscriber = Subscriber::findOrFail($id);
@@ -408,14 +461,14 @@ class SubscriberController extends Controller
              * This filter allows you to control whether the WordPress user email should be updated
              * when there is a change in the FluentCRM subscriber email.
              *
+             * @param bool Whether to update the WordPress user email on change. Default false.
              * @since 2.9.25
              *
-             * @param bool Whether to update the WordPress user email on change. Default false.
              */
             if (!$user && apply_filters('fluentcrm_update_wp_user_email_on_change', false)) {
                 $user = get_user_by('ID', $data['user_id']);
             }
-            
+
             $data['user_id'] = $user ? $user->ID : NULL;
         }
 
@@ -587,16 +640,16 @@ class SubscriberController extends Controller
          *
          * This filter allows modifying the list of emails associated with a subscriber.
          *
-         * @since 1.0.0
-         *
          * @param array {
          *     Array containing the email data.
          *
-         *     @type array $emails List of email records or paginated results.
+         * @type array $emails List of email records or paginated results.
          * }
          * @param int $subscriberId The ID of the subscriber.
          *
          * @return array Filtered email data for the subscriber.
+         * @since 1.0.0
+         *
          */
         return apply_filters('fluentcrm_contact_emails', [
             'emails' => $emails
@@ -673,10 +726,10 @@ class SubscriberController extends Controller
         /**
          * Parse the Subscriber's Note Description.
          *
+         * @param string $note ['description'] The subscriber's note description.
+         * @param object $subscriber The subscriber object.
          * @since 2.8.44
          *
-         * @param string $note['description'] The subscriber's note description.
-         * @param object $subscriber The subscriber object.
          */
         $note['description'] = apply_filters('fluent_crm/parse_campaign_email_text', $note['description'], $subscriber);
 
@@ -724,10 +777,10 @@ class SubscriberController extends Controller
          *
          * This filter allows you to modify the campaign email text before it is processed for a Subscriber's Note Description.
          *
+         * @param string $note ['description'] Subscriber's Note Description from parsed campaign email text.
+         * @param object $subscriber The subscriber object data.
          * @since 2.8.44
          *
-         * @param string $note['description'] Subscriber's Note Description from parsed campaign email text.
-         * @param object $subscriber The subscriber object data.
          */
         $note['description'] = apply_filters('fluent_crm/parse_campaign_email_text', $note['description'], $subscriber);
 
@@ -783,15 +836,15 @@ class SubscriberController extends Controller
          *
          * The dynamic portion of the hook name, `$provider`, refers to the form provider.
          *
-         * @since 2.5.1
-         *
          * @param array {
          *     An array of form submissions data.
          *
-         *     @type array $data  The form submissions data.
-         *     @type int   $total The total number of form submissions.
+         * @type array $data The form submissions data.
+         * @type int $total The total number of form submissions.
          * }
          * @param object $subscriber The subscriber object.
+         * @since 2.5.1
+         *
          */
         $data = apply_filters('fluentcrm_get_form_submissions_' . $provider, [
             'data'  => [],
@@ -814,15 +867,15 @@ class SubscriberController extends Controller
          *
          * The dynamic portion of the hook name, `$provider`, refers to the support ticket provider.
          *
-         * @since 2.5.1
-         *
          * @param array {
          *     An array of support tickets data.
          *
-         *     @type array $data  The support tickets data.
-         *     @type int   $total The total number of support tickets.
+         * @type array $data The support tickets data.
+         * @type int $total The total number of support tickets.
          * }
          * @param object $subscriber The subscriber object.
+         * @since 2.5.1
+         *
          */
         $data = apply_filters('fluentcrm-get_support_tickets_' . $provider, [
             'data'  => [],
@@ -926,15 +979,15 @@ class SubscriberController extends Controller
          *
          * The dynamic portion of the hook name, `$sectionId`, refers to the ID of the profile section.
          *
-         * @since 2.5.1
-         *
          * @param array {
          *     An array of profile section data.
          *
-         *     @type string $heading      The heading of the profile section.
-         *     @type string $content_html The HTML content of the profile section.
+         * @type string $heading The heading of the profile section.
+         * @type string $content_html The HTML content of the profile section.
          * }
          * @param object $subscriber The subscriber object.
+         * @since 2.5.1
+         *
          */
         return apply_filters('fluencrm_profile_section_' . $sectionId, [
             'heading'      => '',
@@ -954,13 +1007,13 @@ class SubscriberController extends Controller
          * This filter allows modifying the data before saving it for a profile section
          * identified by the `$sectionId`.
          *
-         * @since 2.8.44
-         *
          * @param mixed  The data to be saved for the profile section. Defaults to an empty string.
          * @param array  The input data received from the request. Defaults to an empty array.
          * @param object $subscriber The subscriber object for which the profile section is being updated.
          *
          * @return mixed Filtered data to be saved for the profile section.
+         * @since 2.8.44
+         *
          */
         $response = apply_filters('fluencrm_profile_section_save_' . $sectionId, '', $request->get('data', []), $subscriber);
 
@@ -1303,10 +1356,10 @@ class SubscriberController extends Controller
                 'message'            => __('Contact Type has been updated for the selected subscribers', 'fluent-crm')
             ];
         } else if ($actionName == 'update_custom_fields') {
-            $customField      = $request->get('custom_field');
-            $customFieldKey   = Arr::get($customField, 'key');
+            $customField = $request->get('custom_field');
+            $customFieldKey = Arr::get($customField, 'key');
             $customFieldValue = Arr::get($customField, 'value');
-            $subscribers      = Subscriber::whereIn('id', $subscriberIds)->get();
+            $subscribers = Subscriber::whereIn('id', $subscriberIds)->get();
 
             if (empty($customFieldKey)) {
                 return $this->sendError([
@@ -1362,13 +1415,13 @@ class SubscriberController extends Controller
              *
              * The dynamic portion of the hook name, `$actionName`, refers to the specific bulk action being performed.
              *
-             * @since 2.9.0
-             *
-             * @param mixed  $response      The initial response for the bulk action. Can be modified by the filter.
-             * @param array  $subscriberIds An array of subscriber IDs targeted by the bulk action.
-             * @param array  $request->all()   The full request data as an associative array.
+             * @param mixed $response The initial response for the bulk action. Can be modified by the filter.
+             * @param array $subscriberIds An array of subscriber IDs targeted by the bulk action.
+             * @param array $request ->all()   The full request data as an associative array.
              *
              * @return mixed Filtered response for the bulk action.
+             * @since 2.9.0
+             *
              */
             $result = apply_filters('fluent_crm/contact_bulk_action_' . $actionName, $response, $subscriberIds, $request->all());
 
@@ -1541,10 +1594,10 @@ class SubscriberController extends Controller
              *
              * This filter allows modification of the subscriber info widget based on the widget type.
              *
-             * @since 2.8.40
-             *
              * @param array The array of widgets.
              * @param object $subscriber The subscriber object data.
+             * @since 2.8.40
+             *
              */
             $widgets = apply_filters('fluent_crm/subscriber_info_widget_' . $byWidget, [], $subscriber);
             $widgets = array_values($widgets);
@@ -1569,10 +1622,10 @@ class SubscriberController extends Controller
          *
          * This filter allows modification of the top widgets displayed for a subscriber.
          *
-         * @since 2.8.0
-         *
          * @param array The array of top widgets.
          * @param object $subscriber The subscriber object.
+         * @since 2.8.0
+         *
          */
         $topWidgets = array_filter(apply_filters('fluent_crm/subscriber_top_widgets', array_filter([$commerce]), $subscriber));
 
@@ -1581,10 +1634,10 @@ class SubscriberController extends Controller
          *
          * This filter allows modification of the subscriber info widgets.
          *
-         * @since 2.8.0
-         *
          * @param array  An array of existing widgets.
          * @param object $subscriber The subscriber object.
+         * @since 2.8.0
+         *
          */
         $otherWidgets = apply_filters('fluent_crm/subscriber_info_widgets', [], $subscriber);
 

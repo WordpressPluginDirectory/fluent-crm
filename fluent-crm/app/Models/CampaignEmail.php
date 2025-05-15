@@ -302,20 +302,23 @@ class CampaignEmail extends Model
         if ($subscriber) {
             $subscriber->campaign_id = $this->campaign_id;
             $footerText = Helper::getEmailFooterContent($this->campaign);
-            /**
-             * Filter the footer text of the campaign email.
-             *
-             * This filter allows you to modify the footer text of the campaign email before it is sent to the subscriber.
-             *
-             * @since 2.7.0
-             *
-             * @param string $footerText The footer text of the campaign email.
-             * @param object $subscriber The subscriber object.
-             */
-            $footerText = apply_filters('fluent_crm/parse_campaign_email_text', $footerText, $subscriber);
 
-            $preViewUrl = site_url('?fluentcrm=1&route=email_preview&_e_hash=' . $this->email_hash);
-            $footerText = str_replace('##web_preview_url##', $preViewUrl, $footerText);
+            if($footerText) {
+                /**
+                 * Filter the footer text of the campaign email.
+                 *
+                 * This filter allows you to modify the footer text of the campaign email before it is sent to the subscriber.
+                 *
+                 * @since 2.7.0
+                 *
+                 * @param string $footerText The footer text of the campaign email.
+                 * @param object $subscriber The subscriber object.
+                 */
+                $footerText = apply_filters('fluent_crm/parse_campaign_email_text', $footerText, $subscriber);
+
+                $preViewUrl = site_url('?fluentcrm=1&route=email_preview&_e_hash=' . $this->email_hash);
+                $footerText = str_replace('##web_preview_url##', $preViewUrl, $footerText);
+            }
         }
 
         if ($this->campaign && Arr::get($this->campaign->settings, 'template_config')) {

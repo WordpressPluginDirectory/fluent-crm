@@ -112,7 +112,9 @@ class SequencePoints
              */
             if ($sequence->type == 'benchmark') {
                 if ($sequence->settings['type'] == 'required') {
-                    $this->requiredBenchMark = $sequence;
+                    if (!$this->funnelSubscriber || !apply_filters('fluent_crm/benchmark_already_asserted_' . $sequence->action_name, false, $sequence, $this->funnelSubscriber)) {
+                        $this->requiredBenchMark = $sequence;
+                    }
                 }
                 continue;
             }

@@ -3,6 +3,7 @@
 namespace FluentCrm\App\Services\Libs\Mailer;
 
 use FluentCrm\App\Models\CampaignEmail;
+use FluentCrm\App\Models\SubscriberPivot;
 use FluentCrm\App\Services\Helper;
 use FluentCrm\Framework\Support\Arr;
 
@@ -169,7 +170,20 @@ class Handler extends BaseHandler
             return false; // already subscribed
         }
 
-        $config = Helper::getDoubleOptinSettings();
+        $listIdOfSubscriber = Helper::latestListIdOfSubscriber($subscriber->id);
+        $config = null;
+        if ($listIdOfSubscriber) {
+            $globalDoubleOptin = fluentcrm_get_list_meta($listIdOfSubscriber, 'global_double_optin');
+            if ($globalDoubleOptin && $globalDoubleOptin->value == 'no') {
+                $meta = fluentcrm_get_meta($listIdOfSubscriber, 'FluentCrm\App\Models\Lists', 'double_optin_settings', []);
+                $config = $meta ? $meta->value : null;
+            }
+        }
+
+        if (!$config) {
+            $config = Helper::getDoubleOptinSettings();
+        }
+
         if (!Arr::get($config, 'email_subject') || !Arr::get($config, 'email_body')) {
             return false; // is not valid
         }

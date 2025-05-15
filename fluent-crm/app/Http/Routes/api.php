@@ -80,6 +80,8 @@ $router->prefix('subscribers')->withPolicy('SubscriberPolicy')->group(function (
 
     $router->get('{id}/url-metrics', 'SubscriberController@getUrlMetrics')->int('id');
 
+    $router->post('bulk-add-update', 'SubscriberController@bulkAddUpdate');
+
 });
 
 $router->prefix('campaigns')->withPolicy('CampaignPolicy')->group(function ($router) {
@@ -393,5 +395,6 @@ $router->prefix('companies')->withPolicy('CompanyPolicy')->group(function ($rout
     $router->get('custom-fields', 'CompanyController@getCustomGlobalFields');
     $router->put('custom-fields', 'CompanyController@saveCustomGlobalFields');
 
+    $router->get('{id}/custom_tab_view', 'CompanyController@getCompanyExternalView')->int('id');
 });
 

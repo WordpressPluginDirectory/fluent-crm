@@ -730,4 +730,31 @@ class CompanyController extends Controller
             'message' => __('Fields saved successfully!', 'fluent-crm')
         ]);
     }
+
+    public function getCompanyExternalView(Request $request, $companyId)
+    {
+        $company = Company::findOrFail($companyId);
+        $sectionId = $request->get('section_provider');
+
+        return apply_filters('fluent_crm/company_profile_section_' . $sectionId, [
+            'heading'      => '',
+            'content_html' => ''
+        ], $company);
+    }
+
+    public function saveExternalViewData(Request $request, $companyId)
+    {
+        $company = Company::findOrFail($companyId);
+        $sectionId = $request->get('section_provider');
+
+        $response = apply_filters('fluent_crm/company_profile_section_save_' . $sectionId, '', $request->get('data', []), $company);
+
+        if (!$response) {
+            return $this->sendError([
+                'message' => __('Handler could not be found.', 'fluent-crm')
+            ]);
+        }
+
+        return $response;
+    }
 }

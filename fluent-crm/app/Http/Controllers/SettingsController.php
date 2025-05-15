@@ -83,19 +83,37 @@ class SettingsController extends Controller
 
     public function getDoubleOptinSettings(Request $request)
     {
-        $doubleOptinSettings = Helper::getDoubleOptinSettings();
-        if (empty($doubleOptinSettings['tag_based_redirect'])) {
-            $doubleOptinSettings['tag_based_redirect'] = 'no';
-            $doubleOptinSettings['tag_redirects'] = [
-                [
-                    'field_key'   => [],
-                    'field_value' => ''
-                ]
-            ];
+        //check if list id comes
+        $listId = $request->get('list_id', null);
+        $doubleOptinSettings = null;
+        //if list id sent then it is double optin setup of a list
+        if ($listId) {
+            $meta = fluentcrm_get_list_meta($listId, 'double_optin_settings');
+            $doubleOptinSettings = $meta ? $meta->value : null;
         }
+
+        //if no double optin setup of list found or this is global
+        if (!$doubleOptinSettings) {
+            $doubleOptinSettings = Helper::getDoubleOptinSettings();
+            if (empty($doubleOptinSettings['tag_based_redirect'])) {
+                $doubleOptinSettings['tag_based_redirect'] = 'no';
+                $doubleOptinSettings['tag_redirects'] = [
+                    [
+                        'field_key'   => [],
+                        'field_value' => ''
+                    ]
+                ];
+            }
+        }
+
         $data = [
             'settings' => $doubleOptinSettings
         ];
+
+        if ($listId) {
+            $globalDoubleOptin = fluentcrm_get_list_meta($listId, 'global_double_optin');
+            $data['global_double_optin'] = $globalDoubleOptin ? $globalDoubleOptin->value : 'yes';
+        }
 
         if (in_array('settings_fields', $request->get('with', []))) {
 
@@ -209,6 +227,8 @@ class SettingsController extends Controller
     public function saveDoubleOptinSettings(Request $request)
     {
         $settings = wp_unslash($request->get('settings'));
+        $listId = $request->get('list_id');
+        $globalDoubleOptin = sanitize_text_field($request->get('global_double_optin'));
 
         $this->validate($settings, [
             'email_subject'         => 'required',
@@ -232,7 +252,14 @@ class SettingsController extends Controller
             ]);
         }
 
-        fluentcrm_update_option('double_optin_settings', $settings);
+        if ($listId) {
+            fluentcrm_update_list_meta($listId, 'double_optin_settings', $settings);
+            if ($globalDoubleOptin) {
+                fluentcrm_update_list_meta($listId, 'global_double_optin', $globalDoubleOptin);
+            }
+        } else {
+            fluentcrm_update_option('double_optin_settings', $settings);
+        }
 
         return $this->sendSuccess([
                 'message' => __('Double Opt-in settings has been updated', 'fluent-crm')

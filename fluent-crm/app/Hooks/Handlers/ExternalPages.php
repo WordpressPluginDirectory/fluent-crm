@@ -8,6 +8,7 @@ use FluentCrm\App\Models\CampaignEmail;
 use FluentCrm\App\Models\Meta;
 use FluentCrm\App\Models\Subscriber;
 use FluentCrm\App\Models\SubscriberNote;
+use FluentCrm\App\Models\SubscriberPivot;
 use FluentCrm\App\Models\Webhook;
 use FluentCrm\App\Services\BlockParser;
 use FluentCrm\App\Services\Helper;
@@ -288,17 +289,18 @@ class ExternalPages
             $subscriber = fluentCrmApi('contacts')->getContactByManagedSecureHash($managedSecureHash);
         }
 
-        /*
-         * @todo: Remove this at march 2024
-         */
-        if (!$subscriber) {
-            $subscriber = fluentCrmApi('contacts')->getContactBySecureHash($this->request->get('secure_hash'));
-        }
-
         // check if this is a POST request
         if ($this->request->method() == 'POST') {
             // This is List-Unsubscribe request
             if ($subscriber && $subscriber->status != 'unsubscribed') {
+                if ($campaignEmailId) {
+                    $campaignEmail = CampaignEmail::find($campaignEmailId);
+                } else {
+                    $campaignEmail = null;
+                }
+
+                do_action('fluent_crm/before_contact_unsubscribe_from_email', $subscriber, $campaignEmail, 'from_header');
+
                 $oldStatus = $subscriber->status;
 
                 fluentCrmDb()->table('fc_subscribers')
@@ -310,7 +312,6 @@ class ExternalPages
                 $subscriber = Subscriber::where('id', $subscriber->id)->first();
                 do_action('fluentcrm_subscriber_status_to_unsubscribed', $subscriber, $oldStatus);
                 fluentcrm_update_subscriber_meta($subscriber->id, 'unsubscribe_reason', 'Unsubscribe From List Header');
-                $campaignEmail = CampaignEmail::find($campaignEmailId);
                 if ($campaignEmail) {
                     CampaignUrlMetric::maybeInsert([
                         'campaign_id'   => $campaignEmail->campaign_id,
@@ -321,7 +322,7 @@ class ExternalPages
             }
 
             wp_send_json_success([
-                'message' => __("You’ve successfully unsubscribed from our email list.", 'fluent-crm')
+                'message' => __("You've successfully unsubscribed from our email list.", 'fluent-crm')
             ], 200);
             return;
         }
@@ -578,6 +579,17 @@ class ExternalPages
 
         $oldStatus = $subscriber->status;
 
+
+        $emailId = intval($request->get('_e_id'));
+        if ($emailId) {
+            $campaignEmail = CampaignEmail::find($emailId);
+        } else {
+            $campaignEmail = null;
+        }
+
+        do_action('fluent_crm/before_contact_unsubscribe_from_email', $subscriber, $campaignEmail, 'web_ui');
+
+
         if ($oldStatus != 'unsubscribed') {
 
             fluentCrmDb()->table('fc_subscribers')
@@ -602,7 +614,7 @@ class ExternalPages
             do_action('fluent_crm/subscriber_unsubscribed_from_web_ui', $subscriber, $data);
         }
 
-        $emailId = intval($request->get('_e_id'));
+
         $reason = sanitize_text_field($request->get('reason'));
 
         if ($reason == 'other') {
@@ -615,8 +627,6 @@ class ExternalPages
                 $reason = sanitize_text_field($reasons[$reason]);
             }
         }
-
-        $campaignEmail = CampaignEmail::find($emailId);
 
         fluentcrm_update_subscriber_meta($subscriber->id, 'unsubscribe_reason', $reason);
 
@@ -659,7 +669,7 @@ class ExternalPages
             'description'   => sprintf(__('Subscriber unsubscribed from IP Address: %1s <br />Reason: %2s', 'fluent-crm'), FluentCrm()->request->getIp(fluentCrmWillAnonymizeIp()), $reason)
         ]);
 
-        $message = __("You’ve successfully unsubscribed from our email list.", 'fluent-crm');
+        $message = __("You've successfully unsubscribed from our email list.", 'fluent-crm');
         wp_send_json_success([
             /**
              * Determine the unsubscribe response message in FluentCRM.
@@ -820,7 +830,20 @@ class ExternalPages
                 }
             }
 
-            $config = Helper::getDoubleOptinSettings();
+            $listIdOfSubscriber = Helper::latestListIdOfSubscriber($subscriber->id);
+
+            $config = null;
+            if ($listIdOfSubscriber) {
+                $globalDoubleOptin = fluentcrm_get_list_meta($listIdOfSubscriber, 'global_double_optin');
+                if ($globalDoubleOptin && $globalDoubleOptin->value == 'no') {
+                    $meta = fluentcrm_get_meta($listIdOfSubscriber, 'FluentCrm\App\Models\Lists', 'double_optin_settings', []);
+                    $config = $meta ? $meta->value : null;
+                }
+            }
+
+            if (!$config) {
+                $config = Helper::getDoubleOptinSettings();
+            }
 
             /**
              * Determine the double opt-in options configuration in FluentCRM.

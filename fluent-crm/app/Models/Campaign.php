@@ -62,7 +62,8 @@ class Campaign extends Model
                 ],
                 'advanced_filters'    => [[]],
                 'template_config'     => Helper::getTemplateConfig($defaultTemplate),
-                'sending_type'        => 'instant'
+                'sending_type'        => 'instant',
+                'is_transactional'    => 'no'
             ];
         });
 
@@ -277,17 +278,17 @@ class Campaign extends Model
              *
              * This filter allows you to modify the details of a dynamic segment.
              *
-             * @since 2.5.93
-             * 
              * @param array  The details of the dynamic segment.
-             * @param int    $segmentSettings['id']      The ID of the segment.
+             * @param int $segmentSettings ['id']      The ID of the segment.
              * @param array {
              *     Additional context for the segment.
-             * 
-             *     @type bool  Whether to include the model in the context.
-             * }                    
-             *                               
+             *
+             * @type bool  Whether to include the model in the context.
+             * }
+             *
              * @return array Modified segment details.
+             * @since 2.5.93
+             *
              */
             $segmentDetails = apply_filters('fluentcrm_dynamic_segment_' . $segmentSettings['slug'], [], $segmentSettings['id'], [
                 'model' => true
@@ -847,8 +848,8 @@ class Campaign extends Model
         $labels = $this->labels();
         return $labels->map(function ($label) {
             return [
-                'id' => $label->id,
-                'slug' => $label->slug,
+                'id'    => $label->id,
+                'slug'  => $label->slug,
                 'title' => $label->title,
                 'color' => $label->settings['color'] ?? ''
             ];
@@ -873,9 +874,9 @@ class Campaign extends Model
         if (!empty($newLabelIds)) {
             foreach ($newLabelIds as $labelId) {
                 TermRelation::create([
-                    'object_id' => $this->id,
+                    'object_id'   => $this->id,
                     'object_type' => __CLASS__,
-                    'term_id' => $labelId
+                    'term_id'     => $labelId
                 ]);
             }
         }

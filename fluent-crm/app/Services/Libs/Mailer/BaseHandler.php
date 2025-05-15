@@ -87,7 +87,7 @@ abstract class BaseHandler
 
             $this->sentCount++;
 
-            $response = Mailer::send($emailData, $email->subscriber);
+            $response = Mailer::send($emailData, $email->subscriber, $email);
 
             $this->dispatchedWithinOneSecond++;
 

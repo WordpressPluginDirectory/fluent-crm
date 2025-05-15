@@ -246,6 +246,17 @@ class SendEmailAction extends BaseAction
             do_action('fluentcrm_process_contact_jobs', $subscriber);
         } else if ($customAddresses = Arr::get($settings, 'send_email_custom')) {
             $customAddresses = array_map('trim', explode(',', $customAddresses));
+            /**
+             * Filters and parses custom email addresses for a campaign email text.
+             *
+             * This code applies the 'fluent_crm/parse_campaign_email_text' filter to process
+             * the custom email addresses for a given subscriber.
+             *
+             * @param array $customAddresses The custom email addresses to be parsed.
+             * @param object $subscriber The subscriber object containing subscriber details.
+             * 
+             * @return array The filtered and parsed custom email addresses.
+             */
             $customAddresses = apply_filters('fluent_crm/parse_campaign_email_text', $customAddresses, $subscriber);
             $campaign->sendToCustomAddresses($customAddresses, $args, $subscriber);
         }

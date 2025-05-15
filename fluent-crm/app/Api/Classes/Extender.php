@@ -50,6 +50,37 @@ final class Extender
         }
     }
 
+    public function addCompanyProfileSection($key, $sectionTitle, $callback, $saveCallback = null)
+    {
+        add_filter('fluent_crm/company_profile_sections', function ($sections) use ($key, $sectionTitle) {
+            $sections[$key] = [
+                'name'    => 'fluent_crm_company_section_extended',
+                'title'   => $sectionTitle,
+                'handler' => 'route',
+                'query'   => [
+                    'handler' => $key
+                ]
+            ];
+            return $sections;
+        });
+
+        add_filter('fluent_crm/company_profile_section_' . $key, function ($content, $subscriber) use ($callback) {
+            if (is_callable($callback)) {
+                return $callback($content, $subscriber);
+            }
+            return $content;
+        }, 10, 2);
+
+        if ($saveCallback) {
+            add_filter('fluent_crm/company_profile_section_save_' . $key, function ($response, $data, $company) use ($saveCallback) {
+                if (is_callable($saveCallback)) {
+                    return $saveCallback($response, $data, $company);
+                }
+                return $response;
+            }, 10, 3);
+        }
+    }
+
     public function addSmartCode($key, $title, $shortcodes, $callback)
     {
         $reservedKeys = [

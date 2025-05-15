@@ -373,30 +373,50 @@ class TemplateController extends Controller
         ];
     }
 
-
     /**
-     * Fetches built-in templates from a WordPress REST API endpoint.
-     *
-     * @return array An array containing information about the templates.
+     * Fetches built-in templates from cached locally
+     * cached for 24 hours, then refreshed
+     * @return 
      */
     public function getBuiltInTemplates()
+    {
+        $templates = fluentCrmPersistentCache('email_remote_templates', function () {
+                return $this->loadRemoteTemplates();
+            }, 60 * 60 * 24); // 24 hours
+
+        // Return a success response with the formatted templates
+        return $this->sendSuccess([
+            'templates' => $templates
+        ]);
+    }
+
+    /**
+     * Fetches and formats email templates from a remote FluentCRM API endpoint.
+     * This method makes an HTTP request to retrieve email templates from FluentCRM's public API.
+     * It processes the response and formats the templates into a standardized structure.
+     * @throws \WP_Error Logs error message if the API request fails
+     * @return array
+     * @access public
+     */
+
+    public function loadRemoteTemplates()
     {
         $restApi = 'https://fluentcrm.com/wp-json/wp/v2/';
 
         // Make a GET request to retrieve CRM templates
-        $request = wp_remote_get($restApi.'crm-templates?template_type=email_template', [
+        $response = wp_remote_get($restApi.'crm-templates?template_type=email_template', [
             'sslverify' => false,
         ]);
 
         // Check if the request resulted in an error
-        if (is_wp_error($request)) {
+        if (is_wp_error($response)) {
             // Handle error
-            error_log($request->get_error_message());
+            error_log($response->get_error_message());
             return [];
         }
 
         // Decode the JSON response from the request
-        $templateLists = json_decode(wp_remote_retrieve_body($request), true);
+        $templateLists = json_decode(wp_remote_retrieve_body($response), true);
         $formattedTemplates = [];
 
         foreach ($templateLists as $template) {
@@ -419,10 +439,7 @@ class TemplateController extends Controller
             ];
         }
 
-        // Return a success response with the formatted templates
-        return $this->sendSuccess([
-            'templates' => $formattedTemplates
-        ]);
+        return $formattedTemplates;
     }
 
 

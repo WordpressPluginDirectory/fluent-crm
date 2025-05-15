@@ -4,6 +4,7 @@ namespace FluentCrm\App\Services;
 
 use FluentCrm\App\Models\Lists;
 use FluentCrm\App\Models\Subscriber;
+use FluentCrm\App\Models\SubscriberPivot;
 use FluentCrm\App\Models\SystemLog;
 use FluentCrm\App\Models\UrlStores;
 use FluentCrm\App\Models\Webhook;
@@ -826,7 +827,7 @@ class Helper
         if (!$color_palette || !is_array($color_palette)) {
             return null;
         }
-        
+
         foreach ($color_palette as $color) {
             if (isset($color['slug']) && isset($color['color']) && $color['slug'] === $slug) {
                 return $color['color'];
@@ -2027,6 +2028,11 @@ class Helper
     public static function getEmailFooterContent($campaign = null)
     {
         if ($campaign && isset($campaign->settings)) {
+
+            if (Arr::get($campaign->settings, 'is_transactional') == 'yes') {
+                return '';
+            }
+
             $customFooter = Arr::get($campaign->settings, 'footer_settings.custom_footer');
             $emailFooter = Arr::get($campaign->settings, 'footer_settings.footer_content');
 
@@ -2394,5 +2400,16 @@ class Helper
         $users = array_unique($users_by_login, SORT_REGULAR);
 
         return $users;
+    }
+
+    public static function latestListIdOfSubscriber($contactId)
+    {
+        $listId = SubscriberPivot::where('subscriber_id', $contactId)
+            ->where('object_type', 'FluentCrm\App\Models\Lists')
+            ->orderBy('created_at', 'DESC')
+            ->orderBy('id', 'DESC')
+            ->value('object_id');
+
+        return $listId;
     }
 }

@@ -88,7 +88,7 @@ class CampaignUrlMetric extends Model
 
             if ($campaignLinks) {
                 foreach ($stats as $statIndex => $stat) {
-                    if ($stat['total'] < 2 && !in_array($stat['url'], $campaignLinks)) {
+                    if ($stat['total'] < 1 && !in_array($stat['url'], $campaignLinks)) {
                         unset($stats[$statIndex]);
                         continue;
                     }

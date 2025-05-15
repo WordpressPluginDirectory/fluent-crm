@@ -1860,7 +1860,9 @@ class TransStrings
             'Selected tag(s) added when cart is lost. Removed on successful order.'                 => __('Selected tag(s) will be added when cart is lost. These will be automatically removed on successful order', 'fluent-crm'),
             'Add Tags on Cart Abandoned'                                                            => __('Add Tags on Cart Abandoned', 'fluent-crm'),
             'Add Lists on Cart Abandoned'                                                           => __('Add Lists on Cart Abandoned', 'fluent-crm'),
-
+            'Mark_Transactional'                                                                    => __('Mark this as Transactional Email', 'fluent-crm'),
+            'Double Optin Settings'                                                                 => __('Double Optin Settings', 'fluent-crm'),
+            'transaction_checkbox_note'                                                             => __('If enabled no email footer or unsubscribe link will be added to the email', 'fluent-crm'),
         ];
     }
 }

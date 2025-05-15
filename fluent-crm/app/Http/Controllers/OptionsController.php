@@ -413,6 +413,73 @@ class OptionsController extends Controller
 
         }
 
+        if($optionKey == 'voxel_products' || $optionKey == 'product_selector_voxel') {
+            $pushedIds = [];
+            $args = array(
+                'post_type' => 'product',
+                'post_status' => 'publish',
+                'posts_per_page' => 20
+            );
+
+            if ($search) {
+                $args['s'] = $search;
+            }
+
+            $query = new \WP_Query($args);
+            $products = $query->posts;
+
+            foreach ($products as $product) {
+                $options[] = [
+                    'id' => $product->ID,
+                    'title' => $product->post_title
+                ];
+                $pushedIds[] = $product->ID;
+            }
+
+            if ($includedIds) {
+                $includedIds = array_diff($includedIds, $pushedIds);
+                if ($includedIds) {
+                    $args = array(
+                        'post_type' => 'product',
+                        'post_status' => 'publish',
+                        'post__in' => $includedIds
+                    );
+                    $query = new \WP_Query($args);
+                    $products = $query->posts;
+
+                    foreach ($products as $product) {
+                        $options[] = [
+                            'id' => $product->ID,
+                            'title' => $product->post_title
+                        ];
+                    }
+                }
+            }
+
+            return [
+                'options' => $options
+            ];
+        }
+
+        if($optionKey == 'voxel_product_types') {
+            $formattedTypes = [];
+            
+            if (class_exists('\Voxel\Product_Type')) {
+                $product_types = \Voxel\Product_Type::get_all();
+                
+                foreach ($product_types as $product_type) {
+                    $formattedTypes[] = [
+                        'id' => $product_type->get_key(),
+                        'title' => $product_type->get_label()
+                    ];
+                }
+            }
+
+            return [
+                'options' => $formattedTypes
+            ];
+        }
+
         if ($optionKey == 'campaigns' || $optionKey == 'funnels' || $optionKey == 'email_sequences') {
 
             if ($optionKey == 'campaigns') {

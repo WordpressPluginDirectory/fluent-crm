@@ -236,6 +236,17 @@ class FunnelProcessor
     {
         update_option('_fc_last_funnel_processor_ran', time(), 'no');
 
+        /**
+         * Apply a filter to retrieve the subscriber statuses for the funnel.
+         *
+         * This filter allows customization of the subscriber statuses used in the funnel processing.
+         * By default, it includes only the 'active' status.
+         *
+         * @since 1.0.0
+         *
+         * @param array $statuses The default subscriber statuses, which is ['active'].
+         * @return array Filtered subscriber statuses.
+         */
         $statuses = apply_filters('fluent_crm/funnel_subscriber_statuses', ['active']);
 
         $jobs = FunnelSubscriber::whereIn('status', $statuses)

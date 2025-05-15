@@ -4,7 +4,7 @@ Tags: email marketing, newsletter, crm, email newsletter, subscribers
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.3
-Stable tag: 2.9.50
+Stable tag: 2.9.60
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -258,6 +258,21 @@ You can report any security bugs found in the source code of FluentCRM plugins t
 10. Pro Integrations
 
 == Changelog ==
+
+= 2.9.60 (Date: May 14, 2025) =
+New: Introduced built-in templates feature
+New: List-wise double opt-in email settings now available
+New: Voxel New Order Placed Trigger
+New: Option to send custom emails as transactional email
+New: Custom menu tab functionality added on the company profile page
+New: Dynamic segments based on active WooCommerce subscriptions
+New: Added Contact Unsubscribe hook for enhanced customization
+New: Bulk add/update contacts REST API endpoint
+Fixed: Sorting Issue in Purchase History tab in Contact Profile
+Fixed: Custom Field multi-line text Issue
+Fixed: CSV export issue with the contacts filter
+Fixed: Links tracking issue in Link Stats in Campaign details.
+Other Improvements & Bug Fixes
 
 = 2.9.50 (Date: April 17, 2025) =
 New: Shortcode support for multiple email campaign archives

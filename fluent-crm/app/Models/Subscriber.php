@@ -605,7 +605,7 @@ class Subscriber extends Model
         $items = $this->custom_field_meta()->whereIn('key', $keys)->get();
         $formattedValues = [];
         foreach ($items as $item) {
-            $formattedValues[$item->key] = $item->value;
+            $formattedValues[$item->key] = apply_filters('fluent_crm/modify_custom_field_value', $item->value);
         }
         return $formattedValues;
     }
