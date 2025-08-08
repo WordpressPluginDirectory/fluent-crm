@@ -221,6 +221,19 @@ class SubscriberController extends Controller
                 $subscriber->save();
                 if (in_array($column, ['status', 'contact_type'])) {
                     do_action('fluentcrm_subscriber_' . $column . '_to_' . $value, $subscriber, $oldValue);
+
+                    if ($column == 'status') {
+                        /**
+                         * Contact's Status has been changed
+                         *
+                         * @param Subscriber $subscriber Subscriber Model.
+                         * @param string $oldStatus Old Status.
+                         * @since 1.0
+                         *
+                         */
+                        do_action('fluent_crm/subscriber_status_changed', $subscriber, $oldValue, $value);
+                    }
+
                 }
                 if ($column == 'avatar') {
                     do_action('fluent_crm/subscriber_avatar_update', $subscriber, $oldValue);
@@ -1272,9 +1285,7 @@ class SubscriberController extends Controller
             foreach ($subscribers as $subscriber) {
                 $oldStatus = $subscriber->status;
                 if ($oldStatus != $newStatus) {
-                    $subscriber->status = $newStatus;
-                    $subscriber->save();
-                    do_action('fluentcrm_subscriber_status_to_' . $newStatus, $subscriber, $oldStatus);
+                    $subscriber->updateStatus($newStatus);
                 }
             }
 

@@ -3,6 +3,7 @@
 namespace FluentCrm\App\Http\Controllers;
 
 use FluentCrm\App\Models\Tag;
+use FluentCrm\App\Services\Helper;
 use FluentCrm\Framework\Support\Arr;
 use FluentCrm\Framework\Request\Request;
 
@@ -79,7 +80,7 @@ class TagsController extends Controller
         $allData = $request->all();
 
         if (empty($allData['slug'])) {
-            $allData['slug'] = sanitize_title($allData['title'], 'display');
+            $allData['slug'] = Helper::slugify($allData['title']);
         } else {
             $allData['slug'] = sanitize_text_field($allData['slug']);
         }
@@ -118,8 +119,8 @@ class TagsController extends Controller
             'title' => 'required'
         ]);
 
-        if (!empty($allData['slug'])) {
-            $allData['slug'] = sanitize_title($allData['slug'], 'display');
+        if (empty($allData['slug'])) {
+            $allData['slug'] = Helper::slugify($allData['title']);
         }
 
         if ($id == 0 && $request->get('update_by') == 'slug' && !empty($allData['slug'])) {
@@ -179,7 +180,7 @@ class TagsController extends Controller
             }
 
             if (empty($tag['slug'])) {
-                $tag['slug'] = sanitize_title($tag['title'], 'display');
+                $tag['slug'] = Helper::slugify($tag['title']);
             }
 
             $tag = Tag::updateOrCreate(

@@ -246,6 +246,40 @@ class FormsController extends Controller
 
     public function getTemplates()
     {
+        $templates = [
+            'inline_subscribe'    => [
+                'label'       => __('Inline Opt-in Form', 'fluent-crm'),
+                'image'       => fluentCrmMix('images/forms/form_1.svg'),
+                'id'          => 'inline_subscribe',
+                'form_fields' => '{"fields":[{"index":1,"element":"input_email","attributes":{"type":"email","name":"email","value":"","id":"","class":"extra_spaced","placeholder":"Email Address"},"settings":{"container_class":"","label":"","label_placement":"","help_message":"","admin_field_label":"Email Address","validation_rules":{"required":{"value":true,"message":"This field is required"},"email":{"value":true,"message":"This field must contain a valid email"}},"conditional_logics":{"type":"any","status":false,"conditions":[{"field":"","value":"","operator":""}]},"is_unique":"no","unique_validation_message":"Email address need to be unique."},"editor_options":{"title":"Email Address","icon_class":"ff-edit-email","template":"inputText"},"uniqElKey":"el_1601142291509"}],"submitButton":{"uniqElKey":"el_1524065200616","element":"button","attributes":{"type":"submit","class":""},"settings":{"align":"left","button_style":"default","container_class":"top_merged","help_message":"","background_color":"#409EFF","button_size":"md","color":"#ffffff","button_ui":{"type":"default","text":"Subscribe","img_url":""},"normal_styles":{"backgroundColor":"#409EFF","borderColor":"#409EFF","color":"#ffffff","borderRadius":"","minWidth":""},"hover_styles":{"backgroundColor":"#ffffff","borderColor":"#409EFF","color":"#409EFF","borderRadius":"","minWidth":""},"current_state":"normal_styles"},"editor_options":{"title":"Submit Button"}}}',
+                'custom_css'  => $this->getFormCss('inline_subscribe'),
+                'map_fields'  => [
+                    'email' => 'email'
+                ]
+            ],
+            'simple_optin'        => [
+                'label'       => __('Simple Opt-in Form', 'fluent-crm'),
+                'image'       => fluentCrm('url.assets') . 'images/forms/form_2.svg',
+                'id'          => 'simple_optin',
+                'form_fields' => '{"fields":[{"index":1,"element":"input_email","attributes":{"type":"email","name":"email","value":"","id":"","class":"","placeholder":"Your Email Address"},"settings":{"container_class":"","label":"","label_placement":"","help_message":"","admin_field_label":"Email Address","validation_rules":{"required":{"value":true,"message":"This field is required"},"email":{"value":true,"message":"This field must contain a valid email"}},"conditional_logics":[],"is_unique":"no","unique_validation_message":"Email address need to be unique."},"editor_options":{"title":"Email Address","icon_class":"ff-edit-email","template":"inputText"},"uniqElKey":"el_16011431576720.7540920979222681"}],"submitButton":{"uniqElKey":"el_1524065200616","element":"button","attributes":{"type":"submit","class":""},"settings":{"align":"left","button_style":"default","container_class":"","help_message":"","background_color":"#409EFF","button_size":"md","color":"#ffffff","button_ui":{"type":"default","text":"Subscribe To Newsletter","img_url":""},"normal_styles":{"backgroundColor":"#409EFF","borderColor":"#409EFF","color":"#ffffff","borderRadius":"","minWidth":""},"hover_styles":{"backgroundColor":"#ffffff","borderColor":"#409EFF","color":"#409EFF","borderRadius":"","minWidth":""},"current_state":"normal_styles"},"editor_options":{"title":"Submit Button"}}}',
+                'custom_css'  => '',
+                'map_fields'  => [
+                    'email' => 'email'
+                ]
+            ],
+            'with_name_subscribe' => [
+                'label'       => __('Subscription Form', 'fluent-crm'),
+                'image'       => fluentCrm('url.assets') . 'images/forms/form_3.svg',
+                'id'          => 'with_name_subscribe',
+                'form_fields' => '{"fields":[{"index":0,"element":"input_name","attributes":{"name":"names","data-type":"name-element"},"settings":{"container_class":"","admin_field_label":"Name","conditional_logics":{"type":"any","status":false,"conditions":[{"field":"","value":"","operator":""}]},"label_placement":""},"fields":{"first_name":{"element":"input_text","attributes":{"type":"text","name":"first_name","value":"","id":"","class":"","placeholder":"First Name"},"settings":{"container_class":"","label":"First Name","help_message":"","visible":true,"validation_rules":{"required":{"value":false,"message":"This field is required"}},"conditional_logics":[]},"editor_options":{"template":"inputText"}},"middle_name":{"element":"input_text","attributes":{"type":"text","name":"middle_name","value":"","id":"","class":"","placeholder":"","required":false},"settings":{"container_class":"","label":"Middle Name","help_message":"","error_message":"","visible":false,"validation_rules":{"required":{"value":false,"message":"This field is required"}},"conditional_logics":[]},"editor_options":{"template":"inputText"}},"last_name":{"element":"input_text","attributes":{"type":"text","name":"last_name","value":"","id":"","class":"","placeholder":"Last Name","required":false},"settings":{"container_class":"","label":"Last Name","help_message":"","error_message":"","visible":true,"validation_rules":{"required":{"value":false,"message":"This field is required"}},"conditional_logics":[]},"editor_options":{"template":"inputText"}}},"editor_options":{"title":"Name Fields","element":"name-fields","icon_class":"ff-edit-name","template":"nameFields"},"uniqElKey":"el_1570866006692"},{"index":1,"element":"input_email","attributes":{"type":"email","name":"email","value":"","id":"","class":"","placeholder":"Email Address"},"settings":{"container_class":"","label":"Email","label_placement":"","help_message":"","admin_field_label":"","validation_rules":{"required":{"value":true,"message":"This field is required"},"email":{"value":true,"message":"This field must contain a valid email"}},"conditional_logics":{"type":"any","status":false,"conditions":[{"field":"","value":"","operator":""}]},"is_unique":"no","unique_validation_message":"Email address need to be unique."},"editor_options":{"title":"Email Address","icon_class":"ff-edit-email","template":"inputText"},"uniqElKey":"el_1570866012914"}],"submitButton":{"uniqElKey":"el_1524065200616","element":"button","attributes":{"type":"submit","class":""},"settings":{"align":"left","button_style":"default","container_class":"","help_message":"","background_color":"#409EFF","button_size":"md","color":"#ffffff","button_ui":{"type":"default","text":"Subscribe","img_url":""},"normal_styles":{"backgroundColor":"#409EFF","borderColor":"#409EFF","color":"#ffffff","borderRadius":"","minWidth":""},"hover_styles":{"backgroundColor":"#ffffff","borderColor":"#409EFF","color":"#409EFF","borderRadius":"","minWidth":""},"current_state":"normal_styles"},"editor_options":{"title":"Submit Button"}}}',
+                'custom_css'  => '',
+                'map_fields'  => [
+                    'email'      => 'email',
+                    'first_name' => '{inputs.names.first_name}',
+                    'last_name'  => '{inputs.names.last_name}'
+                ]
+            ]
+        ];
         /**
          * Define the form templates for FluentCRM Forms(Fluent Forms).
          *
@@ -286,38 +320,7 @@ class FormsController extends Controller
          * }
          */
         return apply_filters('fluent_crm/ff_form_templates', [
-            'inline_subscribe'    => [
-                'label'       => __('Inline Opt-in Form', 'fluent-crm'),
-                'image'       => fluentCrmMix('images/forms/form_1.svg'),
-                'id'          => 'inline_subscribe',
-                'form_fields' => '{"fields":[{"index":1,"element":"input_email","attributes":{"type":"email","name":"email","value":"","id":"","class":"extra_spaced","placeholder":"Email Address"},"settings":{"container_class":"","label":"","label_placement":"","help_message":"","admin_field_label":"Email Address","validation_rules":{"required":{"value":true,"message":"This field is required"},"email":{"value":true,"message":"This field must contain a valid email"}},"conditional_logics":{"type":"any","status":false,"conditions":[{"field":"","value":"","operator":""}]},"is_unique":"no","unique_validation_message":"Email address need to be unique."},"editor_options":{"title":"Email Address","icon_class":"ff-edit-email","template":"inputText"},"uniqElKey":"el_1601142291509"}],"submitButton":{"uniqElKey":"el_1524065200616","element":"button","attributes":{"type":"submit","class":""},"settings":{"align":"left","button_style":"default","container_class":"top_merged","help_message":"","background_color":"#409EFF","button_size":"md","color":"#ffffff","button_ui":{"type":"default","text":"Subscribe","img_url":""},"normal_styles":{"backgroundColor":"#409EFF","borderColor":"#409EFF","color":"#ffffff","borderRadius":"","minWidth":""},"hover_styles":{"backgroundColor":"#ffffff","borderColor":"#409EFF","color":"#409EFF","borderRadius":"","minWidth":""},"current_state":"normal_styles"},"editor_options":{"title":"Submit Button"}}}',
-                'custom_css'  => $this->getFormCss('inline_subscribe'),
-                'map_fields'  => [
-                    'email' => 'email'
-                ]
-            ],
-            'simple_optin'        => [
-                'label'       => __('Simple Opt-in Form', 'fluent-crm'),
-                'image'       => fluentCrm('url.assets') . 'images/forms/form_2.svg',
-                'id'          => 'simple_optin',
-                'form_fields' => '{"fields":[{"index":1,"element":"input_email","attributes":{"type":"email","name":"email","value":"","id":"","class":"","placeholder":"Your Email Address"},"settings":{"container_class":"","label":"","label_placement":"","help_message":"","admin_field_label":"Email Address","validation_rules":{"required":{"value":true,"message":"This field is required"},"email":{"value":true,"message":"This field must contain a valid email"}},"conditional_logics":[],"is_unique":"no","unique_validation_message":"Email address need to be unique."},"editor_options":{"title":"Email Address","icon_class":"ff-edit-email","template":"inputText"},"uniqElKey":"el_16011431576720.7540920979222681"}],"submitButton":{"uniqElKey":"el_1524065200616","element":"button","attributes":{"type":"submit","class":""},"settings":{"align":"left","button_style":"default","container_class":"","help_message":"","background_color":"#409EFF","button_size":"md","color":"#ffffff","button_ui":{"type":"default","text":"Subscribe To Newsletter","img_url":""},"normal_styles":{"backgroundColor":"#409EFF","borderColor":"#409EFF","color":"#ffffff","borderRadius":"","minWidth":""},"hover_styles":{"backgroundColor":"#ffffff","borderColor":"#409EFF","color":"#409EFF","borderRadius":"","minWidth":""},"current_state":"normal_styles"},"editor_options":{"title":"Submit Button"}}}',
-                'custom_css'  => '',
-                'map_fields'  => [
-                    'email' => 'email'
-                ]
-            ],
-            'with_name_subscribe' => [
-                'label'       => __('Subscription Form', 'fluent-crm'),
-                'image'       => fluentCrm('url.assets') . 'images/forms/form_3.svg',
-                'id'          => 'with_name_subscribe',
-                'form_fields' => '{"fields":[{"index":0,"element":"input_name","attributes":{"name":"names","data-type":"name-element"},"settings":{"container_class":"","admin_field_label":"Name","conditional_logics":{"type":"any","status":false,"conditions":[{"field":"","value":"","operator":""}]},"label_placement":""},"fields":{"first_name":{"element":"input_text","attributes":{"type":"text","name":"first_name","value":"","id":"","class":"","placeholder":"First Name"},"settings":{"container_class":"","label":"First Name","help_message":"","visible":true,"validation_rules":{"required":{"value":false,"message":"This field is required"}},"conditional_logics":[]},"editor_options":{"template":"inputText"}},"middle_name":{"element":"input_text","attributes":{"type":"text","name":"middle_name","value":"","id":"","class":"","placeholder":"","required":false},"settings":{"container_class":"","label":"Middle Name","help_message":"","error_message":"","visible":false,"validation_rules":{"required":{"value":false,"message":"This field is required"}},"conditional_logics":[]},"editor_options":{"template":"inputText"}},"last_name":{"element":"input_text","attributes":{"type":"text","name":"last_name","value":"","id":"","class":"","placeholder":"Last Name","required":false},"settings":{"container_class":"","label":"Last Name","help_message":"","error_message":"","visible":true,"validation_rules":{"required":{"value":false,"message":"This field is required"}},"conditional_logics":[]},"editor_options":{"template":"inputText"}}},"editor_options":{"title":"Name Fields","element":"name-fields","icon_class":"ff-edit-name","template":"nameFields"},"uniqElKey":"el_1570866006692"},{"index":1,"element":"input_email","attributes":{"type":"email","name":"email","value":"","id":"","class":"","placeholder":"Email Address"},"settings":{"container_class":"","label":"Email","label_placement":"","help_message":"","admin_field_label":"","validation_rules":{"required":{"value":true,"message":"This field is required"},"email":{"value":true,"message":"This field must contain a valid email"}},"conditional_logics":{"type":"any","status":false,"conditions":[{"field":"","value":"","operator":""}]},"is_unique":"no","unique_validation_message":"Email address need to be unique."},"editor_options":{"title":"Email Address","icon_class":"ff-edit-email","template":"inputText"},"uniqElKey":"el_1570866012914"}],"submitButton":{"uniqElKey":"el_1524065200616","element":"button","attributes":{"type":"submit","class":""},"settings":{"align":"left","button_style":"default","container_class":"","help_message":"","background_color":"#409EFF","button_size":"md","color":"#ffffff","button_ui":{"type":"default","text":"Subscribe","img_url":""},"normal_styles":{"backgroundColor":"#409EFF","borderColor":"#409EFF","color":"#ffffff","borderRadius":"","minWidth":""},"hover_styles":{"backgroundColor":"#ffffff","borderColor":"#409EFF","color":"#409EFF","borderRadius":"","minWidth":""},"current_state":"normal_styles"},"editor_options":{"title":"Submit Button"}}}',
-                'custom_css'  => '',
-                'map_fields'  => [
-                    'email'      => 'email',
-                    'first_name' => '{inputs.names.first_name}',
-                    'last_name'  => '{inputs.names.last_name}'
-                ]
-            ]
+            'templates' => $templates
         ]);
     }
 
@@ -343,10 +346,10 @@ class FormsController extends Controller
     private function getSelectedTemplate($templateId)
     {
         $templates = $this->getTemplates();
-        if (isset($templates[$templateId])) {
-            return $templates[$templateId];
+        if (isset($templates['templates'][$templateId])) {
+            return $templates['templates'][$templateId];
         }
-        $templatesArray = array_values($templates);
+        $templatesArray = array_values($templates['templates']);
         return $templatesArray[0];
     }
 }

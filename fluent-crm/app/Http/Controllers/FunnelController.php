@@ -582,8 +582,11 @@ class FunnelController extends Controller
 
                 $labelIds = TermRelation::where('object_id', $funnel->id)
                     ->where('object_type', Funnel::class)
-                    ->pluck('term_id');
-                $funnel->detachLabels($labelIds);
+                    ->pluck('term_id')
+                    ->toArray();
+                if (!empty($labelIds)) {
+                    $funnel->detachLabels($labelIds);
+                }
 
                 foreach ($sequences as $deletingSequence) {
                     do_action('fluentcrm_funnel_sequence_deleting_' . $deletingSequence->action_name, $deletingSequence, $funnel);
@@ -1082,7 +1085,6 @@ class FunnelController extends Controller
             'message' => __('Funnel has been created from template', 'fluent-crm')
         ];
 
-
     }
 
     private function createFunnelFromData($funnelArray, $sequences)
@@ -1215,7 +1217,9 @@ class FunnelController extends Controller
 
     public function getDynamicTemplates()
     {
-        $restApi = 'https://fluentcrm.com/wp-json/wp/v2/crm-templates?template_type=automation_template';
+        $restBase =  defined('FC_TEMPLATE_API_DOMAIN') ? FC_TEMPLATE_API_DOMAIN : 'https://fluentcrm.com';
+        $restApi =  $restBase.'/wp-json/wp/v2/automation-templates';
+
         $response = wp_remote_get($restApi, [
             'sslverify' => false,
         ]);
@@ -1261,7 +1265,9 @@ class FunnelController extends Controller
 
     public function getFunnelData($jsonUrl)
     {
-        $request = wp_remote_get($jsonUrl);
+        $request = wp_remote_get($jsonUrl, [
+            'sslverify' => false,
+        ]);
 
         if (is_wp_error($request)) {
             return [];

@@ -6,9 +6,11 @@ use FluentCrm\App\Models\Lists;
 use FluentCrm\App\Models\Subscriber;
 use FluentCrm\App\Models\SubscriberPivot;
 use FluentCrm\App\Models\SystemLog;
+use FluentCrm\App\Models\Tag;
 use FluentCrm\App\Models\UrlStores;
 use FluentCrm\App\Models\Webhook;
 use FluentCrm\Framework\Support\Arr;
+use FluentCrm\Framework\Support\Str;
 
 class Helper
 {
@@ -553,6 +555,16 @@ class Helper
     public static function getContactPrefixes($withKeyed = false)
     {
         /**
+         * Base contact prefixes with translatable labels.
+         * These will show up in Loco Translate under the 'fluent-crm' domain.
+         */
+        $prefixes = [
+            __('Mr', 'fluent-crm'),
+            __('Mrs', 'fluent-crm'),
+            __('Ms', 'fluent-crm')
+        ];
+
+        /**
          * Filter the contact name prefixes.
          *
          * This filter is deprecated. Please use fluent_crm/contact_name_prefixes instead.
@@ -563,11 +575,7 @@ class Helper
          * @since 2.5.5
          *
          */
-        $prefixes = apply_filters('fluentcrm_contact_name_prefixes', [
-            'Mr',
-            'Mrs',
-            'Ms'
-        ]);
+        $prefixes = apply_filters('fluentcrm_contact_name_prefixes', $prefixes);
 
         /**
          * Filter the contact name prefixes.
@@ -2411,5 +2419,174 @@ class Helper
             ->value('object_id');
 
         return $listId;
+    }
+
+    public static function createNewTags($tagsArray)
+    {
+        $tags = [];
+        foreach ($tagsArray as $tag) {
+            $tag = sanitize_text_field($tag);
+            //if that tag already exists then I need only it's id
+            $sameTag = Tag::where('title', $tag)->first();
+            if ($sameTag) {
+                $tags[] = $sameTag->id;
+                continue;
+            }
+
+            $tagModel = Helper::createTag($tag);
+
+            if ($tagModel) {
+                $tags[] = $tagModel->id;
+            }
+        }
+
+        return $tags;
+    }
+
+    public static function createNewLists($listsArray)
+    {
+        $lists = [];
+        foreach ($listsArray as $list) {
+            $list = sanitize_text_field($list);
+            //if that list already exists then I need only it's id
+            $sameList = Lists::where('title', $list)->first();
+            if ($sameList) {
+                $lists[] = $sameList->id;
+                continue;
+            }
+
+            $listModel = Helper::createList($list);
+
+            if ($listModel) {
+                $lists[] = $listModel->id;
+            }
+        }
+
+        return $lists;
+    }
+
+    public static function getNewAttachableLists($listsArray, $currentListIds, $ListsForAllContacts)
+    {
+        $listIds = [];
+
+        foreach ($listsArray as $listTitle) {
+            $listTitle = sanitize_text_field($listTitle);
+
+            $existinglist = Lists::where('title', $listTitle)->first();
+            if ($existinglist) {
+                if (!in_array($existinglist->id, $currentListIds) && !in_array($existinglist->id, $ListsForAllContacts)) {
+                    //if that existing list is not already in user's list and not in those lists that will be applied to all subscribers
+                    $listIds[] = $existinglist->id;
+                }
+            } else {
+                $newList = Helper::createList($listTitle);
+                $listIds[] = $newList->id;
+            }
+        }
+
+        return $listIds;
+    }
+
+    public static function getNewAttachableTags($tagsArray, $currentTagIds, $TagsForAllContacts)
+    {
+        $tagIds = [];
+
+        foreach ($tagsArray as $tagTitle) {
+            $tagTitle = sanitize_text_field($tagTitle);
+
+            $existingTag = Tag::where('title', $tagTitle)->first();
+            if ($existingTag) {
+                if (!in_array($existingTag->id, $currentTagIds) && !in_array($existingTag->id, $TagsForAllContacts)) {
+                    //if that existing tag is not already in user's tag and not in those tags that will be applied to all subscribers
+                    $tagIds[] = $existingTag->id;
+                }
+            } else {
+                $newList = Helper::createTag($tagTitle);
+                $tagIds[] = $newList->id;
+            }
+        }
+
+        return $tagIds;
+    }
+
+    private static function createList($listTitle) {
+        $baseSlug = Str::slug($listTitle);
+        $slug = $baseSlug;
+        $counter = 1;
+
+        // Ensure unique slug
+        while (Lists::where('slug', $slug)->exists()) {
+            $slug = "{$baseSlug}-{$counter}";
+            $counter++;
+        }
+
+        return Lists::create(
+            [
+                'title' => $listTitle,
+                'slug' => $slug
+            ]
+        );
+    }
+
+    private static function createTag($tagTitle) {
+        $baseSlug = Str::slug($tagTitle);
+        $slug = $baseSlug;
+        $counter = 1;
+
+        // Ensure unique slug
+        while (Tag::where('slug', $slug)->exists()) {
+            $slug = "{$baseSlug}-{$counter}";
+            $counter++;
+        }
+
+        return Tag::create(
+            [
+                'title' => $tagTitle,
+                'slug' => $slug
+            ]
+        );
+    }
+
+    /**
+     * Converts text into a URL-friendly slug, handling Latin and non-Latin scripts.
+     *
+     * @param string $text Input text to slugify
+     * @param string $fallback Fallback slug if input is empty or invalid
+     * @return string Sanitized slug
+     */
+    public static function slugify($text, $fallback = '')
+    {
+        // Normalize input: cast to string and trim whitespace
+        $text = trim((string) $text);
+
+        // Handle empty input
+        if (empty($text)) {
+            return sanitize_title($fallback ?: self::generateUniqueId(), $fallback);
+        }
+
+        // Process as Latin-based text
+        $slug = remove_accents($text); // Convert accents (e.g., é → e)
+        $slug = strtolower($slug); // Convert to lowercase
+        $slug = preg_replace('/[^a-z0-9\-_]/', '-', $slug); // Replace non-alphanumeric with dashes
+        $slug = preg_replace('/[\-_]{2,}/', '-', $slug); // Collapse multiple dashes/underscores
+        $slug = trim($slug, '-_'); // Trim leading/trailing dashes/underscores
+
+        // Check for empty result or non-Latin scripts
+        if (empty($slug) || preg_match('/[^\p{Latin}\p{N}\-_ ]/u', $text)) {
+            $slug = self::generateUniqueId();
+        }
+
+        // Final cleanup with WordPress sanitize_title
+        return sanitize_title($slug, $fallback);
+    }
+
+    /**
+     * Generates a unique, hyphenated identifier (~11-12 characters).
+     *
+     * @return string Unique ID, e.g., '6f1a2-xyz12'
+     */
+    public static function generateUniqueId()
+    {
+        return sprintf('%s-%s', substr(uniqid(), -5), wp_generate_password(5, false, false));
     }
 }

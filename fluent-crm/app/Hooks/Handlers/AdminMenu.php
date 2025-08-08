@@ -1393,11 +1393,10 @@ class AdminMenu
              * @type string $uri The URL for the menu item.
              * @type bool $is_parent Whether the menu item has child items.
              * @type array $children An array of child menu items.
-             *     }
-             * }
              * @param array $permissions An array of permissions for the current user.
              */
-            $sideBarMenus = apply_filters('fluent_crm/full_sidebar_menu_items', [
+
+            $fullSideBarCoreMenus = [
                 [
                     'key'        => 'dashboard',
                     'page_title' => __('Dashboard', 'fluent-crm'),
@@ -1459,6 +1458,11 @@ class AdminMenu
                     'capability' => $dashboardPermission,
                     'uri'        => $urlBase . 'funnels'
                 ],
+            ];
+
+            $menuItems = apply_filters('fluent_crm/sidebar_core_menu_items', $fullSideBarCoreMenus, $permissions);
+
+            $otherSidebarMenus = [
                 [
                     'key'        => 'reports',
                     'page_title' => __('Reports', 'fluent-crm'),
@@ -1487,10 +1491,15 @@ class AdminMenu
                     'capability' => ($isAdmin) ? $dashboardPermission : 'fcrm_manage_settings',
                     'uri'        => $urlBase . 'documentation'
                 ]
-            ], $permissions);
+            ];
+
+            // now merge the core and other menus
+            $fullSideBarMenus = array_merge($menuItems, $otherSidebarMenus);
+
+            $fullSideBarMenus = apply_filters('fluent_crm/full_sidebar_menu_items', $fullSideBarMenus, $permissions);
 
             $app['view']->render('admin.experimental_menu', [
-                'menu_items' => $sideBarMenus,
+                'menu_items' => $fullSideBarMenus,
                 'logo'       => Arr::get(fluentcrmGetGlobalSettings('business_settings', []), 'logo')
             ]);
 

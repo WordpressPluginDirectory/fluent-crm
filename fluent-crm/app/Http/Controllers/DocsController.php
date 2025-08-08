@@ -80,7 +80,7 @@ class DocsController extends Controller
                 'title'          => __('Fluent Support', 'fluent-crm'),
                 'logo'           => fluentCrmMix('images/fluent-support.svg'),
                 'is_installed'   => defined('FLUENT_SUPPORT_VERSION'),
-                'learn_more_url' => 'https://wordpress.org/plugins/fluent-connect/',
+                'learn_more_url' => 'https://wordpress.org/plugins/fluent-support/',
                 'settings_url'   => admin_url('admin.php?page=fluent-support#/'),
                 'action_text'    => $this->isPluginInstalled('fluent-support/fluent-support.php') ? __('Active Fluent Support', 'fluent-crm') : __('Install Fluent Support', 'fluent-crm'),
                 'description'    => __('WordPress Helpdesk and Customer Support Ticket Plugin. Provide awesome support and manage customer queries right from your WordPress dashboard.', 'fluent-crm')

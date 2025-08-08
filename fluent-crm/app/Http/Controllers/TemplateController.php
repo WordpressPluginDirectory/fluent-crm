@@ -401,10 +401,11 @@ class TemplateController extends Controller
 
     public function loadRemoteTemplates()
     {
-        $restApi = 'https://fluentcrm.com/wp-json/wp/v2/';
+        $restBase =  defined('FC_TEMPLATE_API_DOMAIN') ? FC_TEMPLATE_API_DOMAIN : 'https://fluentcrm.com';
+        $restApi = $restBase.'/wp-json/wp/v2/email-templates';
 
         // Make a GET request to retrieve CRM templates
-        $response = wp_remote_get($restApi.'crm-templates?template_type=email_template', [
+        $response = wp_remote_get($restApi, [
             'sslverify' => false,
         ]);
 
@@ -436,6 +437,7 @@ class TemplateController extends Controller
                 'link'              => $template['link'],
                 'media_url'         => $mediaURL,
                 'status'            => $template['status'],
+                'cover_image'       => $template['cover_image'],
             ];
         }
 
@@ -452,7 +454,9 @@ class TemplateController extends Controller
      * @return string Full source URL of the media item.
      */
     public function getMediaURL($mediaID, $restAPI) {
-        $request = wp_remote_get($restAPI.'media/'.$mediaID);
+        $request = wp_remote_get($restAPI.'media/'.$mediaID, [
+            'sslverify' => false,
+        ]);
 
         // Check for request errors
         if (is_wp_error($request)) {

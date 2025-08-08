@@ -352,17 +352,50 @@ class CompanyController extends Controller
 
         $companyIds = array_map('intval', $request->get('company_ids', []));
         $companyIds = array_filter($companyIds);
+        $lastId = $request->get('last_id', 0);
 
         if (!$companyIds) {
-            return $this->sendError([
-                'message' => __('Companies selection is required', 'fluent-crm')
-            ]);
+        
+
+            $companyQuery = Company::orderBy('id', 'ASC')
+                ->searchBy($request->getSafe('search'));
+
+            $inlineFilters = $request->get('company_query.inline_filters', []);
+
+            if ($inlineFilters && is_array($inlineFilters)) {
+                $inlineFilters = array_filter($inlineFilters);
+
+                foreach ($inlineFilters as $key => $values) {
+                    if (!is_array($values)) {
+                        continue;
+                    }
+                    $values = array_map('sanitize_text_field', $values);
+
+                    if ($key == 'company_categories') {
+                        $companyQuery->whereIn('industry', $values);
+                    } else if ($key == 'company_types') {
+                        $companyQuery->whereIn('type', $values);
+                    }
+                }
+            }
+            $companyQuery = $companyQuery->limit(50)
+                ->where('id', '>', $lastId);
+        } else {
+            $companyQuery = Company::whereIn('id', $companyIds);
         }
 
+        $companies = $companyQuery->get();
+        if ($companies->isEmpty()) {
+            return [
+                'is_completed'       => true,
+                'completed_companies' => 0,
+                'message'            => __('All companies has been processed', 'fluent-crm')
+            ];
+        }
+        $companyIds = $companyQuery->pluck('id')->toArray();
+        $lastCompanyId = end($companyIds);
+
         if ($actionName == 'delete_companies') {
-
-            $companies = Company::whereIn('id', $companyIds)->get();
-
             foreach ($companies as $company) {
                 $id = $company->id;
                 do_action('fluent_crm/before_company_delete', $company);
@@ -371,6 +404,8 @@ class CompanyController extends Controller
             }
 
             return $this->sendSuccess([
+                'last_company_id'    => $lastCompanyId,
+                'completed_companies' => count($companyIds),
                 'message' => __('Selected Companies has been deleted permanently', 'fluent-crm'),
             ]);
         } elseif ($actionName == 'change_company_status') {
@@ -380,8 +415,6 @@ class CompanyController extends Controller
                     'message' => __('Please select status', 'fluent-crm')
                 ]);
             }
-
-            $companies = Company::whereIn('id', $companyIds)->get();
 
             foreach ($companies as $company) {
                 $oldStatus = $company->status;
@@ -393,10 +426,11 @@ class CompanyController extends Controller
             }
 
             return [
+                'last_company_id'    => $lastCompanyId,
+                'completed_companies' => count($companyIds),
                 'message' => __('Status has been changed for the selected companies', 'fluent-crm')
             ];
         } else if ($actionName == 'change_company_type') {
-            $companies = Company::whereIn('id', $companyIds)->get();
             $newType = sanitize_text_field($request->get('new_status', ''));
             if (!$newType) {
                 return $this->sendError([
@@ -413,10 +447,11 @@ class CompanyController extends Controller
             }
 
             return [
+                'last_company_id'    => $lastCompanyId,
+                'completed_companies' => count($companyIds),
                 'message' => __('Company Type has been updated for the selected companies', 'fluent-crm')
             ];
         } else if ($actionName == 'change_company_category') {
-            $companies = Company::whereIn('id', $companyIds)->get();
             $newCategory = sanitize_text_field($request->get('new_status', ''));
             if (!$newCategory) {
                 return $this->sendError([
@@ -433,11 +468,15 @@ class CompanyController extends Controller
             }
 
             return [
+                'last_company_id'    => $lastCompanyId,
+                'completed_companies' => count($companyIds),
                 'message' => __('Company Category has been updated for the selected companies', 'fluent-crm')
             ];
         }
 
         return [
+            'last_company_id'    => $lastCompanyId,
+            'completed_companies' => count($companyIds),
             'message' => __('Selected bulk action has been successfully completed', 'fluent-crm')
         ];
     }

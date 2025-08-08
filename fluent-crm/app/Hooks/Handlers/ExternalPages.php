@@ -178,29 +178,20 @@ class ExternalPages
             $subscriber = Subscriber::where('email', $data['email'])->first();
             if ($subscriber) {
                 $oldStatus = $subscriber->status;
-
                 if ($oldStatus == $data['status']) {
                     return false;
                 }
 
-                fluentCrmDb()->table('fc_subscribers')
-                    ->where('id', $subscriber->id)
-                    ->update([
-                        'status' => $data['status']
-                    ]);
-
+                $subscriber = $subscriber->updateStatus($data['status']);
                 $key = 'reason';
 
                 if ($data['status'] == 'unsubscribed') {
                     $key = 'unsubscribe_reason';
                 }
 
-                $subscriber = Subscriber::where('id', $subscriber->id)->first();
                 fluentcrm_update_subscriber_meta($subscriber->id, $key, $data['reason']);
-                do_action('fluentcrm_subscriber_status_to_' . $data['status'], $subscriber, $oldStatus);
             } else {
                 $willStore = apply_filters('fluent_crm/bounced_email_store', true);
-
                 if ($willStore) {
                     $contactData = Arr::only($data, ['email', 'status']);
                     if (!isset($contactData['created_at'])) {
@@ -259,20 +250,11 @@ class ExternalPages
                 fluentcrm_update_subscriber_meta($subscriber->id, '_soft_bounce_count', ($existingCount + 1));
             } else {
                 $oldStatus = $subscriber->status;
-
                 if ($oldStatus != 'bounced') {
-                    fluentCrmDb()->table('fc_subscribers')
-                        ->where('id', $subscriber->id)
-                        ->update([
-                            'status' => 'bounced'
-                        ]);
-
-                    $subscriber = Subscriber::where('id', $subscriber->id)->first();
-                    do_action('fluentcrm_subscriber_status_to_bounced', $subscriber, $oldStatus);
+                    $subscriber = $subscriber->updateStatus('bounced');
                     fluentcrm_update_subscriber_meta($subscriber->id, 'reason', $data['reason']);
                 }
             }
-
         }
     }
 
@@ -301,16 +283,8 @@ class ExternalPages
 
                 do_action('fluent_crm/before_contact_unsubscribe_from_email', $subscriber, $campaignEmail, 'from_header');
 
-                $oldStatus = $subscriber->status;
+                $subscriber = $subscriber->updateStatus('unsubscribed');
 
-                fluentCrmDb()->table('fc_subscribers')
-                    ->where('id', $subscriber->id)
-                    ->update([
-                        'status' => 'unsubscribed'
-                    ]);
-
-                $subscriber = Subscriber::where('id', $subscriber->id)->first();
-                do_action('fluentcrm_subscriber_status_to_unsubscribed', $subscriber, $oldStatus);
                 fluentcrm_update_subscriber_meta($subscriber->id, 'unsubscribe_reason', 'Unsubscribe From List Header');
                 if ($campaignEmail) {
                     CampaignUrlMetric::maybeInsert([
@@ -591,21 +565,8 @@ class ExternalPages
 
 
         if ($oldStatus != 'unsubscribed') {
+            $subscriber = $subscriber->updateStatus('unsubscribed');
 
-            fluentCrmDb()->table('fc_subscribers')
-                ->where('id', $subscriber->id)
-                ->update([
-                    'status' => 'unsubscribed'
-                ]);
-
-            $subscriber = Subscriber::where('id', $subscriber->id)->first();
-
-            /**
-             * Fires when a subscriber is unsubscribed
-             * @param Subscriber $subscriber
-             * @param string $oldStatus
-             */
-            do_action('fluentcrm_subscriber_status_to_unsubscribed', $subscriber, $oldStatus);
             /**
              * Fires when a subscriber is unsubscribed from Web UI
              * @param Subscriber $subscriber
@@ -784,22 +745,7 @@ class ExternalPages
 
             if ($subscriber->status != 'subscribed') {
 
-                $oldStatus = $subscriber->status;
-
-                fluentCrmDb()->table('fc_subscribers')
-                    ->where('id', $subscriber->id)
-                    ->update([
-                        'status' => 'subscribed'
-                    ]);
-
-                $subscriber = Subscriber::where('id', $subscriber->id)->first();
-
-                /**
-                 * Fires when a contact's status changed to subscribed
-                 * @param Subscriber $subscriber
-                 * @param string $oldStatus
-                 */
-                do_action('fluentcrm_subscriber_status_to_subscribed', $subscriber, $oldStatus);
+                $subscriber = $subscriber->updateStatus('subscribed');
 
                 do_action('fluentcrm_process_contact_jobs', $subscriber);
 

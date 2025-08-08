@@ -264,11 +264,7 @@ class MailChimpMigrator extends BaseMigrator
             $contact = FluentCrmApi('contacts')->createOrUpdate($data);
 
             if (isset($params['status']) && $params['status'] == 'subscribed' && $contact && $contact->status != 'subscribed') {
-                $oldStatus = $contact->status;
-                $contact->status = 'subscribed';
-                $contact->save();
-
-                do_action('fluentcrm_subscriber_status_to_subscribed', $contact, $oldStatus);
+                $contact->updateStatus('subscribed');
             }
 
         }

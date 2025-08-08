@@ -230,7 +230,15 @@ class CsvController extends Controller
                     continue;
                 }
                 if (isset($map['csv'], $map['table'])) {
-                    if (in_array($map['table'], $customFieldKeys)) {
+                    if (in_array($map['table'], ['tags', 'lists'])) {
+                        //if tags or lists are mapped to be imported
+                        if ($map['table'] == 'tags') {
+                            $subscriber['tags'] = !empty($record[$map['csv']]) ? explode(',', $record[$map['csv']]) : [];
+                        } else {
+                            $subscriber['lists'] = !empty($record[$map['csv']]) ? explode(',', $record[$map['csv']]) : [];
+                        }
+                    }
+                    else if (in_array($map['table'], $customFieldKeys)) {
                         $subscriber['custom_values'][$map['table']] = $record[$map['csv']];
                     } else {
                         $subscriber[$map['table']] = $record[$map['csv']];

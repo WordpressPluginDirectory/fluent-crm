@@ -4,7 +4,7 @@ Tags: email marketing, newsletter, crm, email newsletter, subscribers
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.3
-Stable tag: 2.9.60
+Stable tag: 2.9.65
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -259,15 +259,40 @@ You can report any security bugs found in the source code of FluentCRM plugins t
 
 == Changelog ==
 
+= 2.9.65 (Date: August 07, 2025) =
+
+New: Tag export and import functionality
+New: Custom fields in email preference forms
+New: One-click reset of filters for contacts
+Improvement: Enhanced contact filtering with First Name and Last Name options
+Improvement: Comprehensive contact import from CSV now includes tags and lists
+Improvement: Contact status added as an automation condition
+Improvement: Bulk actions now support selecting all companies
+Improvement: Pagination support added for improved list navigation
+Improvement: Email template preview functionality
+Improvement: Background processing for large contact database exports
+Improvement: Enhanced Voxel theme integration detection
+Improvement: Action hooks for dynamic coupon metadata management
+Improvement: WordPress user meta multiple checkbox values handled in SmartCodes
+Fixed: Resend functionality issues in failed email delivery
+Fixed: Form template null error during creation
+Fixed: Multiple custom tab display issues in company profiles
+Fixed: Lifetime purchase value incorrect issue (for woo partial payment addon)
+Fixed: Vertical stretching issue with product images in the woo order table
+Fixed: Bulk deletion issue in automation funnels
+Fixed: Email campaign import issues for visual builder
+Other improvements and bug fixes
+
 = 2.9.60 (Date: May 14, 2025) =
-New: Introduced built-in templates feature
-New: List-wise double opt-in email settings now available
-New: Voxel New Order Placed Trigger
-New: Option to send custom emails as transactional email
-New: Custom menu tab functionality added on the company profile page
+New: Built-in email templates collection
+New: List-specific double opt-in email configuration
+New: Voxel New Order Placed automation trigger
+New: Custom email delivery as transactional messages
+New: Custom menu tabs for company profile pages
 New: Dynamic segments based on active WooCommerce subscriptions
 New: Added Contact Unsubscribe hook for enhanced customization
 New: Bulk add/update contacts REST API endpoint
+Improvement: Added Including Tax calculation in Abandoned Cart Items Table
 Fixed: Sorting Issue in Purchase History tab in Contact Profile
 Fixed: Custom Field multi-line text Issue
 Fixed: CSV export issue with the contacts filter

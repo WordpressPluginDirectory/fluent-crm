@@ -105,7 +105,7 @@ class Cleanup
             ->update([
                 'status' => 'cancelled'
             ]);
-
+        
         if (defined('FLUENTCAMPAIGN')) {
             \FluentCampaign\App\Models\SequenceTracker::where('subscriber_id', $subscriber->id)
                 ->where('status', 'active')

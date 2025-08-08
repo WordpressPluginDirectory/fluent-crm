@@ -4,6 +4,7 @@ namespace FluentCrm\App\Http\Controllers;
 
 use FluentCrm\App\Models\Lists;
 use FluentCrm\App\Models\Subscriber;
+use FluentCrm\App\Services\Helper;
 use FluentCrm\Framework\Support\Arr;
 use FluentCrm\Framework\Request\Request;
 
@@ -32,9 +33,10 @@ class ListsController extends Controller
             'by'    => $request->getSafe('sort_by', 'id', 'sanitize_sql_orderby'),
             'order' => $request->getSafe('sort_order', 'DESC', 'sanitize_sql_orderby')
         ];
-        $lists = Lists::orderBy($order['by'], $order['order'])
+        $paginatedLists = Lists::orderBy($order['by'], $order['order'])
             ->searchBy($request->getSafe('search'))
-            ->get();
+            ->paginate();
+        $lists = $paginatedLists->items();
 
         if (!$request->get('exclude_counts')) {
             foreach ($lists as $list) {
@@ -44,7 +46,10 @@ class ListsController extends Controller
         }
 
         return $this->send([
-            'lists' => $lists
+            'lists' => $lists,
+            'pagination' => [
+                'total' => $paginatedLists->total(),
+            ]
         ]);
     }
 
@@ -114,7 +119,7 @@ class ListsController extends Controller
         ]);
 
         if(!empty($allData['slug'])) {
-            $allData['slug'] = sanitize_title($allData['slug'], 'display');
+            $allData['slug'] = Helper::slugify($allData['title']);
         }
 
         if ($id == 0 && $request->get('update_by') == 'slug' && !empty($allData['slug'])) {
@@ -176,7 +181,7 @@ class ListsController extends Controller
             }
 
             if (empty($list['slug'])) {
-                $list['slug'] = sanitize_text_field($list['title']);
+                $list['slug'] = Helper::slugify($list['title']);
             }
 
             $list = Lists::updateOrCreate(

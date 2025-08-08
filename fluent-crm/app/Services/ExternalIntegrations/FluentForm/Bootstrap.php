@@ -444,10 +444,7 @@ class Bootstrap extends IntegrationManagerController
             }
 
             if ($entry->status == 'confirmed' && $subscriber->status != 'subscribed') {
-                $oldStatus = $subscriber->status;
-                $subscriber->status = 'subscribed';
-                $subscriber->save();
-                do_action('fluentcrm_subscriber_status_to_subscribed', $subscriber, $oldStatus);
+                $subscriber = $subscriber->updateStatus('subscribed');
             }
 
             if ($subscriber->status == 'pending') {
@@ -489,10 +486,7 @@ class Bootstrap extends IntegrationManagerController
             }
 
             if ($entry->status == 'confirmed' && $subscriber->status != 'subscribed') {
-                $oldStatus = $subscriber->status;
-                $subscriber->status = 'subscribed';
-                $subscriber->save();
-                do_action('fluentcrm_subscriber_status_to_subscribed', $subscriber, $oldStatus);
+                $subscriber = $subscriber->updateStatus('subscribed');
             }
 
             if ($hasDouBleOptIn && ($subscriber->status == 'pending' || $subscriber->status == 'unsubscribed')) {
