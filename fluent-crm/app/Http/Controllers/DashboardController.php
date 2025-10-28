@@ -27,7 +27,7 @@ class DashboardController extends Controller
         $notices = [];
 
         if ((time() - $nextMinuteTask) > 120) {
-            $notices[] = '<div style="padding: 15px 10px;" class="error"><b>Attension: </b> Looks like the scheduled cron jobs are not running timely. Please consider setup server side cron. <a href="' . admin_url('admin.php?page=fluentcrm-admin#/settings/settings_tools') . '">Click here to check the status</a></div>';
+            $notices[] = '<div style="padding: 15px 10px;" class="error"><b>Attention: </b> Looks like the scheduled cron jobs are not running timely. Please consider setup server side cron. <a href="' . admin_url('admin.php?page=fluentcrm-admin#/settings/settings_tools') . '">Click here to check the status</a></div>';
         }
 
         $systemTips = '';

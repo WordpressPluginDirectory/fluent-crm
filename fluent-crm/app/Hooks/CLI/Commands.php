@@ -1067,17 +1067,31 @@ class Commands
         $progress = \WP_CLI\Utils\make_progress_bar('Synced Contacts', $subscribers->count());
 
         foreach ($subscribers as $subscriber) {
-            $user = get_user_by('user_email', $subscriber->user_email);
+            $progress->tick();
+
+            $user = get_user_by('email', $subscriber->email);
+
+            if (!$subscriber->user_id && !$user) {
+                continue;
+            }
+
+            if ($user) {
+                if ($subscriber->user_id == $user->ID) {
+                    continue;
+                }
+            }
+
             if ($user) {
                 $subscriber->user_id = $user->ID;
                 $subscriber->save();
+                \WP_CLI::line("Updated user_id for contact ID: {$subscriber->id}");
             } else if ($subscriber->user_id) {
                 $subscriber->user_id = NULL;
                 $subscriber->save();
+                \WP_CLI::line("Removed user_id for contact ID: {$subscriber->id}");
             }
-
-            $progress->tick();
         }
+
         \WP_CLI::line('User ids for contacts has been synced');
     }
 

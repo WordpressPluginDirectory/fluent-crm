@@ -122,7 +122,6 @@ class Contacts
      */
     public function createOrUpdate($data, $forceUpdate = false, $deleteOtherValues = false, $sync = false)
     {
-
         if (empty($data['email']) || !is_email($data['email'])) {
             return false;
         }

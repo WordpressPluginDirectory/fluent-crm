@@ -4,7 +4,7 @@ Tags: email marketing, newsletter, crm, email newsletter, subscribers
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.3
-Stable tag: 2.9.65
+Stable tag: 2.9.84
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -155,6 +155,9 @@ FluentCRM is the perfect companion for your WooCommerce store. You can segment y
 You can send emails to your customers by segmenting them by specific product purchase.
 With <b>WooCommerce Advanced Reports</b>, View sales by product and time range, and compare with other periods to assess store performance.
 
+<h4>FluentCart Integration (FREE):</h4>
+FluentCRM seamlessly integrates with your <a href="https://wordpress.org/plugins/fluent-cart/">FluentCart store</a>, offering robust tools to enhance customer engagement. Segment your contacts using FluentCart Data Properties such as Purchased Products, Categories, Lifetime Value, and more. Easily send targeted emails to customers based on their specific product purchases.
+
 <h4>Easy Digital Downloads Integration:</h4>
 FluentCRM provides the same level of integrations like WooCommerce.
 
@@ -259,8 +262,37 @@ You can report any security bugs found in the source code of FluentCRM plugins t
 
 == Changelog ==
 
-= 2.9.65 (Date: August 07, 2025) =
+= 2.9.84 (Date: October 27, 2025) =
+New: FluentCart filters added to 'Check Condition' in Automations
+New: Paid Memberships Pro purchase history in contact profile
+Fixed: Contact status update issue when re-syncing existing WooCommerce customers
+Fixed: 'Resend Unopened Emails' not working in campaigns
+Fixed: Active subscription dynamic segment for WooCommerce
+Fixed: LifterLMS import failures
+Fixed: Duplicate email open tracking
+Fixed: Sorting by open rate and click rate in the campaigns table
+Fixed: Paymattic subscription amount shown in Purchase History
 
+= 2.9.80 (Date: October 14, 2025) =
+New: Fluent Cart Order & Subscription Triggers
+New: Fluent Cart Purchase History in Contact Profile
+New: Fluent Cart Import Customers
+New: Export/Import List
+New: Tag or List wise contact growth report
+Improvement: 'Prefix' Column Added To Subscribers Table
+Improvement: Enhanced ‘Add Existing Company’ In Contact Company Search With Initial Suggestions
+Improvement: Contact’s Current Status Column Added In Individual Report Section Inside Funnel Report
+Improvement: Group name of contact's custom fields is now editable
+Improvement: Include recipient name in mailer send data
+Improvement: Open Rate And Click Rate Columns In Email Campaigns Table Are Now Sortable
+Fixed: Currency Issue Fix In Funnel Report Chart
+Fixed: Individual Email Display Issue For Custom Email Address In Funnel Report
+Fixed: Monthly Subscriber Growth Chart Issue Solve To Disambiguate Months By Year
+Fixed: Custom Reply To Name, Reply To Email Issue Solved In Email Header For Custom Email Within A Contact’s Profile Section
+Fixed: 'includes all of' condition issue in automation condition
+Fixed: Ab Cart price format issue in email
+
+= 2.9.65 (Date: August 07, 2025) =
 New: Tag export and import functionality
 New: Custom fields in email preference forms
 New: One-click reset of filters for contacts
@@ -531,154 +563,6 @@ Other Improvements & Bug Fixes
 * Added Postal Server support for Email Bounce Handling
 * Webview for Email Campaigns improvements and privacy improvements
 * Other Improvements & Bug Fixes
-
-= 2.8.34 (Date: Nov 14, 2023) =
-* Added One Click Unsubscribe option in compliance features
-* Image upload compatibility with WordPress 6.4 fixed
-* Contact import with company name supported now
-* Active Campaign import improvement (Thanks to WPFusion)
-
-= 2.8.33 (Date: Nov 03, 2023) =
-* Fixed Spacing & FontSize Issue
-* Improvement & Bug Fixes on Both Global & Custom Footer
-* Fixed Syntax Issue in Recurring Email History
-* Fixed Email Open Performance Issue
-* Other Improvements & Bug Fixes
-
-
-= 2.8.30 (Date: Sep 05, 2023) =
-* Improvement on Company module
-* New trigger: Company added to contact Trigger
-* New Trigger: Company Removed Trigger
-* Company Specific Automation Actions
-* Custom email preference management page
-* New Trigger: Contact Created
-* Navigation and UI improvements
-* Duplicate segment or export contacts
-* Other improvements including translatable strings, permissions in CRM managers
-* Other Bug Fixes
-
-= 2.8.20 (Date: Jul 18, 2023) =
-* Campaign Email Scheduling and sending speed increased
-* UI Improvement
-* Confirmation prompt for email campaigns
-* Double Opt-in Email pre-header
-* Ability to delete contact profile picture
-* Company attach/detach
-* Integration Improvements
-* Bug fixes & improvements
-
-= 2.8.0 (Date: Apr 14, 2023) =
-* Added Company module
-* More detailed contact overview
-* Massive UI enhancements
-* FluentCRM Navigation Experience
-* Ability to check email preview for specific contacts
-* New WooCommerce Subscription Triggers (Pro)
-* Improvements and bug fixes
-
-= 2.7.40 (Date: Mar 01, 2023) =
-* Email Conditional Sections issues fixed
-* List & Tag selection UI improved
-* Campaign Email Activity Improvements
-* Fixed Redirecting issues for non-unicode characters
-* Fixed import issue for Restrict Content Pro
-
-= 2.7.0 Date: Jan 23, 2023 =
-* Improvements in Contact Filtering
-* New developer documentation
-* Refactored plugin and performance improvements
-* Enhancements and bug fixes
-* New: Use SmartCode on the Activity notes from the automation
-* Fixed: Theme color is not showing in the Gutenberg editor
-* Fixed: Image alignment issue in the block editor
-* Fixed: Email template saving issue
-* Fixed: The unsubscribe link is not working in the double opt-in confirmation page issue
-* Fixed: The multiline custom field is not working in the email body issue
-
-= 2.6.0 Date: Oct 20, 2022 =
-* Faster email editor
-* Improved Email Sequences
-* Improvement on Automation Goals
-* Select and modify email template blocks in bulk
-* Experimental features for Faster Contact Navigations, Date Formats
-* UI & UX Improvements
-* Bug fixes and minor improvements
-* Experimental Feature: Email Archives in the frontend (Pro)
-* Email campaign, sequence, automation activity conditions on Contact Advanced Filters (pro)
-* New WooCommerce/EDD/LearnDash/LifterLMS conditions (Pro)
-* New Trigger: Birthday Automation (Pro)
-* New Action: Remove WordPress User Role
-* New Trigger: Leave from a Course(LearnDash)
-
-= 2.5.95 (Date: Aug 19, 2022) =
-* Advanced wait action in Automation
-* Added restart automation to all(almost) triggers
-* Sequence filtering for automation
-* View revenue for specific emails
-* Create Fluent Support tickets from Automation
-* Split test automation scenarios (pro)
-* Revenue metrics in email sequences
-* More conditions in Advanced Filtering (pro)
-* Enable/Disable auto sync for integrated tools
-* Email preference management short-code
-* Detailed CRM reporting (pro)
-* Pre-populate Fluent Forms data from FluentCRM
-* Improved Tag import and auto-syncing for MailChimp Driver
-* Bug fixes & improvements
-
-= 2.5.93 (Date: July 07, 2022 ) =
-* Improved scheduled campaigns
-* Huge Performance Improvement
-* Fixed Country Name Filters
-* Improved Contact Imports
-* WP User Sync Issue fixed
-* Contact Exclude from campaign fixed
-* WP Ultimo conflict issue resolved
-
-= 2.5.9 (Date: May 27, 2022 ) =
-* UI Improvements
-* Integration Improvements
-* More Bulk Actions Added
-* Added Subscriber Segment selections view for campaign
-* Added more filters for contacts
-
-= 2.5.8 (Date: March 07, 2022 ) =
-* Fixed campaign sending issue for some server
-* Double Optin issue has been fixed
-* Integration Improvements
-* UI Improvements
-
-= 2.5.6 (Date: February 28, 2022 ) =
-* Added Auto Migration from ActiveCampaign, MailerLite, MailChimp, Drip, ConvertKit
-* Fixed CSV Import Issue for duplicate emails
-* Email Builder Issues fixed for latest version of WP
-* Improved Contact Filtering
-* Integration Improvements
-* Improved UI
-
-= 2.5.5 (Date: February 07, 2022 ) =
-* Bulk Actions Improvements for Contacts
-* Integrations Improvements
-* Automation triggers issues are fixed
-* UI & UX improvements
-
-= 2.5.2 (Date: February 01, 2022 ) =
-* Compatability with WordPress 5.9
-* Improved Email Builder
-* CSV import duplicate data issue fixed
-* Automation Improvement
-* Tagging Improvement
-* UI&UX improvement in several screens across the app
-
-= 2.5.1 (Date: January 28, 2022) =
-* Improved Contact import
-* Contact Search and Segment Improvement
-* Email Campaign improvement and better reporting
-* Automation Triggers and Actions improvements
-* More Integrations
-* Framework update.
-* Tag & List add/remove confirmation
 
 == Upgrade Notice ==
 The latest version is compatible with the previous version, So nothing to worry about.

@@ -3,6 +3,7 @@
 namespace FluentCrm\App\Http\Controllers;
 
 use FluentCrm\App\Hooks\Handlers\ActivationHandler;
+use FluentCrm\App\Models\ActivityLog;
 use FluentCrm\App\Models\Campaign;
 use FluentCrm\App\Models\CampaignEmail;
 use FluentCrm\App\Models\CampaignUrlMetric;
@@ -613,10 +614,18 @@ class SettingsController extends Controller
             ];
         }
 
+        if (in_array('system_logs', $selectedLogs)) {
+            $dataCounters[] = [
+                'title' => __('System Logs', 'fluent-crm'),
+                'count' => SystemLog::where('created_at', '<', $refDate)
+                    ->count()
+            ];
+        }
+
         if (in_array('activity_logs', $selectedLogs)) {
             $dataCounters[] = [
                 'title' => __('Activity Logs', 'fluent-crm'),
-                'count' => SystemLog::where('created_at', '<', $refDate)
+                'count' => ActivityLog::where('created_at', '<', $refDate)
                     ->count()
             ];
         }
@@ -684,13 +693,25 @@ class SettingsController extends Controller
 
         }
 
-        if (in_array('activity_logs', $selectedLogs)) {
+        if (in_array('system_logs', $selectedLogs)) {
             SystemLog::where('created_at', '<', $refDate)
                 ->limit($perChunk)
                 ->delete();
 
             if (!$hasMore) {
                 $hasMore = SystemLog::where('created_at', '<', $refDate)
+                    ->exists();
+            }
+
+        }
+
+        if (in_array('activity_logs', $selectedLogs)) {
+            ActivityLog::where('created_at', '<', $refDate)
+                ->limit($perChunk)
+                ->delete();
+
+            if (!$hasMore) {
+                $hasMore = ActivityLog::where('created_at', '<', $refDate)
                     ->exists();
             }
 
@@ -1013,6 +1034,11 @@ class SettingsController extends Controller
         if (Arr::get($data, 'event_tracking') == 'yes') {
             require_once(FLUENTCRM_PLUGIN_PATH . 'database/migrations/SubscriberEventTracking.php');
             \FluentCrmMigrations\SubscriberEventTracking::migrate();
+        }
+
+        if (Arr::get($data, 'activity_log') == 'yes') {
+            require_once(FLUENTCRM_PLUGIN_PATH . 'database/migrations/ActivityLogsMigrator.php');
+            \FluentCrmMigrations\ActivityLogsMigrator::migrate();
         }
 
         update_option('_fluentcrm_experimental_settings', $data, 'yes');

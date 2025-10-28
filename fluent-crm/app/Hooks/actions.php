@@ -10,6 +10,9 @@
  */
 
 // Init scheduled tasks
+use FluentCart\Api\Resource\OrderResource;
+use FluentCart\App\Models\Order;
+
 \FluentCrm\App\Hooks\Handlers\Scheduler::register();
 
 $app->addAction('fluentcrm_contacts_filter_subscriber', function ($query, $filters) {
@@ -136,6 +139,7 @@ add_action('wp_loaded', function () use ($app) {
  */
 add_action('init', function () {
     (new \FluentCrm\App\Hooks\Handlers\ContactActivityLogger())->register();
+    (new \FluentCrm\App\Hooks\Handlers\ActivityLogHandler())->register();
 });
 
 /*
@@ -194,3 +198,7 @@ add_action('wp_ajax_fluentcrm_renew_rest_nonce', function () {
         'time'  => time()
     ], 200);
 });
+
+
+
+

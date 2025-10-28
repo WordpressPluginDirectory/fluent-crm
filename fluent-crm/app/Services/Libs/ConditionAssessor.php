@@ -136,13 +136,20 @@ class ConditionAssessor
                     return strlen($sourceValue) > $dataValue;
                     break;
                 case 'match_all':
+                    // Exact match (order-independent)
+                    $sourceValue = (array) $sourceValue;
+                    $dataValue = (array) $dataValue;
+                    sort($sourceValue);
+                    sort($dataValue);
+                    $dataValue = array_map('intval', $dataValue);
+                    return $sourceValue == $dataValue;
                 case 'in_all':
                     $sourceValue = (array)$sourceValue;
                     $dataValue = (array)$dataValue;
                     sort($sourceValue);
                     sort($dataValue);
-                    return $sourceValue == $dataValue;
-                    break;
+                    $dataValue = array_map('intval', $dataValue);
+                    return empty(array_diff($dataValue, $sourceValue));
                 case 'match_none_of':
                 case 'not_in_all':
                     $sourceValue = (array)$sourceValue;

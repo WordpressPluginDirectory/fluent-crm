@@ -358,8 +358,9 @@ class SubscriberController extends Controller
              * @param array $data Original raw subscriber.
              * @since 3.30.2
              */
-            do_action('fluentcrm_contact_created', $contact); // @deprecated since 2.8.0. Use fluent_crm/contact_created instead
-            do_action('fluent_crm/contact_created', $contact);
+//            do_action('fluentcrm_contact_created', $contact); // @deprecated since 2.8.0. Use fluent_crm/contact_created instead
+//            do_action('fluent_crm/contact_created', $contact);
+            // no need these action hooks because those are already in the updateOrCreate method in Subscriber model
 
             $double_optin = filter_var($request->get('double_optin'), FILTER_VALIDATE_BOOLEAN);
 

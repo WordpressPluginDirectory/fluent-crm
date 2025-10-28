@@ -168,7 +168,6 @@ class CustomContactField
             $formattedFields[] = $field;
         }
 
-
         fluentcrm_update_option($this->globalMetaName, $formattedFields);
 
         return $formattedFields;
@@ -248,5 +247,23 @@ class CustomContactField
             ];
         }
         return $fieldGroups;
+    }
+
+    public function updateGroupName($oldName, $newName)
+    {
+        $currentCustomFields = fluentcrm_get_option($this->globalMetaName);
+
+        $updatedCustomFields = [];
+
+        foreach ($currentCustomFields as $customField) {
+            if (isset($customField['group']) && $customField['group'] == $oldName) {
+                $customField['group'] = $newName;
+            }
+            $updatedCustomFields[] = $customField;
+        }
+
+        fluentcrm_update_option($this->globalMetaName, $updatedCustomFields);
+
+        return $updatedCustomFields;
     }
 }

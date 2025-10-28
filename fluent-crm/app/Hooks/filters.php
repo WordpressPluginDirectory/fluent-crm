@@ -19,6 +19,7 @@ $app->addFilter('fluent_crm/email-design-template-web_preview', 'EmailDesignTemp
 $app->addFilter('fluent_crm/purchase_history_woocommerce', 'PurchaseHistory@wooOrders', 10, 2);
 $app->addFilter('fluent_crm/purchase_history_edd', 'PurchaseHistory@eddOrders', 10, 2);
 $app->addFilter('fluent_crm/purchase_history_payform', 'PurchaseHistory@payformSubmissions', 10, 2);
+$app->addFilter('fluent_crm/purchase_history_pmpro', 'PurchaseHistory@pmproOrders', 10, 2);
 
 $app->addFilter('fluent_crm/form_submission_providers', 'FormSubmissions@pushDefaultFormProviders');
 $app->addFilter('fluentcrm_get_form_submissions_fluentform', 'FormSubmissions@getFluentFormSubmissions', 10, 2);

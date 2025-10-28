@@ -447,6 +447,7 @@ class ExternalPages
         Mailer::send([
             'to'      => [
                 'email' => $subscriber->email,
+                'name'  => $subscriber->full_name
             ],
             'subject' => $emailSubject,
             'body'    => $emailBody
@@ -496,6 +497,7 @@ class ExternalPages
         Mailer::send([
             'to'      => [
                 'email' => $subscriber->email,
+                'name'  => $subscriber->full_name
             ],
             'subject' => $emailSubject,
             'body'    => $emailBody
@@ -672,22 +674,24 @@ class ExternalPages
             $email = null;
         }
 
-        if ($email && !$email->is_open) {
-            fluentCrmDb()->table('fc_campaign_emails')->where('id', $email->id)->update(
-                [
+        if ($email) {
+            $updated = fluentCrmDb()->table('fc_campaign_emails')
+                ->where('id', $email->id)
+                ->where('is_open', 0)
+                ->update([
                     'is_open' => 1
-                ]
-            );
+                ]); // returns affected rows
 
-            CampaignUrlMetric::maybeInsert([
-                'type'          => 'open',
-                'campaign_id'   => $email->campaign_id,
-                'subscriber_id' => $email->subscriber_id,
-                'ip_address'    => FluentCrm()->request->getIp(fluentCrmWillAnonymizeIp())
-            ]);
+            if ($updated) {
+                CampaignUrlMetric::maybeInsert([
+                    'type'          => 'open',
+                    'campaign_id'   => $email->campaign_id,
+                    'subscriber_id' => $email->subscriber_id,
+                    'ip_address'    => FluentCrm()->request->getIp(fluentCrmWillAnonymizeIp())
+                ]);
 
-            do_action('fluent_crm/email_opened', $email);
-
+                do_action('fluent_crm/email_opened', $email);
+            }
         }
 
         if (ini_get('ignore_user_abort')) {

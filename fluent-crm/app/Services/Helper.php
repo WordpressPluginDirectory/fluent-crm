@@ -639,6 +639,13 @@ class Helper
     {
         $validProviders = [];
 
+        if(defined('FLUENTCART_VERSION')) {
+            $validProviders['fluent_cart'] = [
+                'title' => __('FluentCart Purchase History', 'fluent-crm'),
+                'name'  => __('FluentCart', 'fluent-crm')
+            ];
+        }
+
         if (defined('WC_PLUGIN_FILE')) {
             $validProviders['woocommerce'] = [
                 'title' => __('Woocommerce Purchase History', 'fluent-crm'),
@@ -657,6 +664,13 @@ class Helper
             $validProviders['payform'] = [
                 'title' => __('Paymattic Purchase History', 'fluent-crm'),
                 'name'  => __('Paymattic', 'fluent-crm')
+            ];
+        }
+
+        if (defined('PMPRO_VERSION') && defined('FLUENTCAMPAIGN')) {
+            $validProviders['pmpro'] = [
+                'title' => __('Paid Membership Pro Purchase History', 'fluent-crm'),
+                'name'  => __('Paid Membership Pro', 'fluent-crm')
             ];
         }
 
@@ -997,6 +1011,10 @@ class Helper
     public static function getMailHeader($existingHeader = [])
     {
         if (!empty($existingHeader['From'])) {
+            return $existingHeader;
+        }
+
+        if (!empty($existingHeader['Reply-To'])) {
             return $existingHeader;
         }
 
@@ -1926,7 +1944,8 @@ class Helper
             'multi_threading_emails'   => 'no',
             'system_logs'              => 'no',
             'event_tracking'           => 'no',
-            'abandoned_cart'           => 'no'
+            'abandoned_cart'           => 'no',
+            'activity_log'             => 'no'
         ];
 
         $settings = get_option('_fluentcrm_experimental_settings', []);

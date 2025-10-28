@@ -91,6 +91,7 @@ class SetupWizard
             'dashboard_url'     => admin_url('admin.php?page=fluentcrm-admin&setup_complete=' . time()),
             'business_settings' => (object) $businessSettings,
             'has_fluentform'    => defined('FLUENTFORM'),
+            'has_fluentcart'    => defined('FLUENTCART_VERSION'),
             'auth' => [
                 'permissions' => PermissionManager::currentUserPermissions(),
                 'first_name' => $currentUser->first_name,

@@ -2,6 +2,7 @@
 
 namespace FluentCrm\App\Services\Libs\Parser;
 
+use FluentCart\App\Services\ShortCodeParser\SmartCodeParser;
 use FluentCrm\App\Models\Subscriber;
 use FluentCrm\App\Services\Helper;
 use FluentCrm\Framework\Support\Arr;

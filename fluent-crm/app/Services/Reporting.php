@@ -117,6 +117,7 @@ class Reporting
         $items = FunnelMetric::select([
             'sequence_id',
             'benchmark_currency',
+            'benchmark_value',
             fluentCrmDb()->raw('COUNT(sequence_id) AS count'),
         ])
             ->groupBy('sequence_id')
@@ -201,7 +202,7 @@ class Reporting
 
             $formattedReports[] = $report;
 
-            if ($items[$sequence->id]->benchmark_currency) {
+            if ($items[$sequence->id]->benchmark_value > 0) {
                 $currency = $items[$sequence->id]->benchmark_currency;
             }
 

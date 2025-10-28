@@ -21,6 +21,10 @@ class Integrations
             (new \FluentCrm\App\Services\ExternalIntegrations\FluentForm\FluentFormInit())->init();
         }
 
+        if(defined('FLUENTCART_VERSION')) {
+            (new \FluentCrm\App\Services\ExternalIntegrations\FluentCart\FluentCart())->init();
+        }
+
         /*
          * Oxygen Edito Integration
          */

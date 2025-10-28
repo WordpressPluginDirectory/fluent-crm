@@ -45,12 +45,27 @@ class ListsController extends Controller
             }
         }
 
-        return $this->send([
+        $data = [
             'lists' => $lists,
             'pagination' => [
                 'total' => $paginatedLists->total(),
             ]
-        ]);
+        ];
+
+        if ($request->get('all_lists')) {
+            $allLists = Lists::get();
+            $formattedLists = [];
+            foreach ($allLists as $list) {
+                $formattedLists[] = [
+                    'id'    => strval($list->id),
+                    'title' => $list->title,
+                    'slug'  => $list->slug
+                ];
+            }
+            $data['all_lists'] = $formattedLists;
+        }
+
+        return $this->send($data);
     }
 
     /**

@@ -102,6 +102,9 @@ class Cleanup
 
         FunnelSubscriber::where('subscriber_id', $subscriber->id)
             ->where('status', 'active')
+            ->whereDoesntHave('funnel', function ($query) {
+                $query->where('trigger_name', 'fluent_crm/subscriber_status_changed');
+            })
             ->update([
                 'status' => 'cancelled'
             ]);

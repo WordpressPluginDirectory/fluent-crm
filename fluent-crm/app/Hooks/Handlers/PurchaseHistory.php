@@ -464,16 +464,18 @@ class PurchaseHistory
                 'wpf_submissions.payment_total',
                 'wpf_submissions.payment_method',
                 'wpf_submissions.created_at',
-                'posts.post_title'
+                'posts.post_title',
+                'wpf_subscriptions.recurring_amount',
             ])
             ->join('posts', 'posts.ID', '=', 'wpf_submissions.form_id')
+            ->leftJoin('wpf_subscriptions', 'wpf_subscriptions.submission_id', '=', 'wpf_submissions.id')
             ->where(function ($query) use ($subscriber) {
                 $query->where('wpf_submissions.customer_email', '=', $subscriber->email);
                 if ($subscriber->user_id) {
                     $query->orWhere('wpf_submissions.user_id', '=', $subscriber->user_id);
                 }
             })
-            ->where('wpf_submissions.payment_total', '>', 0)
+            // ->where('wpf_submissions.payment_total', '>', 0)
             ->limit($per_page)
             ->offset($per_page * ($page - 1))
             ->orderBy('wpf_submissions.id', 'desc');
@@ -487,7 +489,7 @@ class PurchaseHistory
             $formattedSubmissions[] = [
                 'id'             => '#' . $submission->id,
                 'Form Title'     => $submission->post_title,
-                'Payment Total'  => wpPayFormFormatMoney($submission->payment_total, $subscriber->form_id),
+                'Payment Total'  => $submission->recurring_amount ? wpPayFormFormatMoney($submission->recurring_amount, $subscriber->form_id) : wpPayFormFormatMoney($submission->payment_total, $subscriber->form_id),
                 'Payment Status' => $submission->payment_status,
                 'Payment Method' => $submission->payment_method,
                 'Submitted At'   => $submission->created_at,
@@ -674,5 +676,123 @@ class PurchaseHistory
             return $sort_type === 'ASC' ? $a_total <=> $b_total : $b_total <=> $a_total;
         });
     }
+
+    public function pmproOrders($data, $subscriber)
+    {
+        if (!defined('PMPRO_VERSION')) {
+            return $data;
+        }
+
+        if (!defined('FLUENTCAMPAIGN')) {
+            return $data;
+        }
+
+        $customer = fluentCrmDb()->table('users')->where('user_email', $subscriber->email)->first();
+
+        if (!$customer) {
+            return false;
+        }
+
+        if (!$subscriber->user_id || $subscriber->user_id != $customer->ID) {
+            $subscriber->user_id = $customer->ID;
+            $subscriber->save();
+        }
+
+        $app = fluentCrm();
+
+        $page = (int)$app->request->get('page', 1);
+        $per_page = (int)$app->request->get('per_page', 10);
+
+        $sort_by   = sanitize_sql_orderby($app->request->get('sort_by', 'ID'));
+        $sort_type = sanitize_sql_orderby($app->request->get('sort_type', 'DESC'));
+
+        $valid_columns = ['ID', 'date', 'modified'];
+        $valid_directions = ['ASC', 'DESC'];
+
+        if (!in_array($sort_by, $valid_columns)) {
+            $sort_by = 'ID';
+        }
+        if (!in_array(strtoupper($sort_type), $valid_directions)) {
+            $sort_type = 'DESC';
+        }
+
+        // Fetch the array of MemberOrder OBJECTS
+        $user_order_objects = \MemberOrder::get_orders([
+            'user_id' => $subscriber->user_id,
+            'status'  => 'success',
+            'orderby' => $sort_by,
+            'order'   => $sort_type
+        ]);
+
+        // Create a new, simple array to hold the data for JSON conversion
+        $formattedOrders = [];
+
+        $totalOrders = count($user_order_objects);
+        $orders = array_slice($user_order_objects, ($page - 1) * $per_page, $per_page);
+
+
+        if (!empty($orders)) {
+            // Loop through each PHP object and extract its data into a simple array
+            foreach ($orders as $order) {
+                // Construct the URL using WordPress's admin_url() function
+                $order_page_url = admin_url('admin.php?page=pmpro-orders&order=' . $order->id);
+                $level = pmpro_getLevel($order->membership_id);
+                $actionsHtml = '<td><a href="' . esc_url($order_page_url) . '" target="_blank">View Order</a></td>';
+                $formattedOrders[] = [
+                    'order_code' => '#' . $order->code,
+                    'membership_level_name' => $level ? $level->name : null,
+                    'status' => $order->status,
+                    'total' => $order->total,
+                    'date' => gmdate('j F, Y', $order->timestamp),
+                    'gateway' => $order->gateway,
+                    'actions' => $actionsHtml
+                ];
+            }
+        }
+
+        return [
+            'data'           => $formattedOrders,
+            'sidebar_html'   => '',
+            'total'          => $totalOrders,
+            'has_recount'    => false,
+            'columns_config' => [
+                'order_code'   => [
+                    'label'    => __('Order Code', 'fluent-crm'),
+                    'width'    => '120px',
+                    'sortable' => false,
+                    'key'      => 'id'
+                ],
+                'membership_level_name'   => [
+                    'label'    => __('Membership Level', 'fluent-crm'),
+                    'sortable' => false,
+                ],
+                'date'    => [
+                    'label'    => __('Date', 'fluent-crm'),
+                    'sortable' => false,
+                    'key'      => 'date_created_gmt'
+                ],
+                'status'  => [
+                    'label' => __('Status', 'fluent-crm'),
+                    'width' => '100px'
+                ],
+                'total'   => [
+                    'label'    => __('Total', 'fluent-crm'),
+                    'width'    => '130px',
+                    'sortable' => false,
+                    'key'      => 'total_amount'
+                ],
+                'gateway'   => [
+                    'label'    => __('Gateway', 'fluent-crm'),
+                    'width'    => '120px',
+                    'sortable' => false,
+                ],
+                'actions' => [
+                    'label' => __('Actions', 'fluent-crm'),
+                    'width' => '100px'
+                ]
+            ]
+        ];
+    }
+
 
 }

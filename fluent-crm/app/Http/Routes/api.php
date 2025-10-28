@@ -276,12 +276,16 @@ $router->prefix('setting')->withPolicy('SettingsPolicy')->group(function ($route
     $router->get('system-logs', 'SystemLogController@index');
     $router->get('system-logs/reset', 'SystemLogController@deleteAll');
 
+    $router->get('activity-logs', 'ActivityLogController@index');
+    $router->get('activity-logs/reset', 'ActivityLogController@deleteAll');
+
 });
 
 
 $router->prefix('custom-fields')->withPolicy('CustomFieldsPolicy')->group(function ($router) {
     $router->get('contacts', 'CustomContactFieldsController@getGlobalFields');
     $router->put('contacts', 'CustomContactFieldsController@saveGlobalFields');
+    $router->put('contacts/update_group_name', 'CustomContactFieldsController@updateGroupName');
 });
 
 $router->prefix('labels')->withPolicy('CustomFieldsPolicy')->group(function ($router) {

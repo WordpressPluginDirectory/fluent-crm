@@ -226,7 +226,8 @@ class Handler extends BaseHandler
 
         $data = [
             'to'      => [
-                'email' => $subscriber->email
+                'email' => $subscriber->email,
+                'name'  => $subscriber->full_name
             ],
             'subject' => $emailSubject,
             'body'    => $emailBody,
