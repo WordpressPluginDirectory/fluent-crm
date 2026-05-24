@@ -47,6 +47,7 @@ abstract class BaseHandler
         $this->sendingChunkNumber++;
 
         $sendableStatuses = ['subscribed', 'transactional'];
+        $table = $wpdb->prefix . 'fc_campaign_emails';
 
         foreach ($campaignEmails as $email) {
             if ($this->reachedEmailLimitPerSecond()) {
@@ -64,25 +65,26 @@ abstract class BaseHandler
             }
 
             $emailData = $email->data();
-            try {
-                $wpdb->update(
-                    $wpdb->prefix . 'fc_campaign_emails',
-                    [
-                        'status'       => 'sent',
-                        'scheduled_at' => current_time('mysql'),
-                        'email_body'   => ''
-                    ],
-                    [
-                        'id' => $email->id
-                    ]
-                );
-                if ($wpdb->last_error) {
-                    Helper::debugLog('DB Error at ' . $this->runnerTitle, $wpdb->last_error, 'error');
-                    return new \WP_Error('db_error', $wpdb->last_error);
-                }
-            } catch (\Exception $e) {
-                Helper::debugLog('DB Error (Exception) at ' . $this->runnerTitle, $e->getMessage(), 'error');
-                return new \WP_Error('db_error', $e->getMessage());
+
+            // for the same id
+            if (Helper::wasProcessedByKeyId('mail_' . $email->id . '_' . $email->email_address)) {
+                continue;
+            }
+
+            // Mark as 'sent' and clear email_body BEFORE sending.
+            // This prevents duplicates on crash — if the process dies after this
+            // point, the email won't be re-queued. Missing one email is acceptable,
+            // sending duplicates is not.
+            $wpdb->update($table, [
+                'status'       => 'sent',
+                'scheduled_at' => current_time('mysql'),
+                'email_body'   => '',
+                'is_parsed'    => 1,
+            ], ['id' => $email->id]);
+
+            if ($wpdb->last_error) {
+                Helper::debugLog('DB Error at ' . $this->runnerTitle, $wpdb->last_error, 'error');
+                return new \WP_Error('db_error', $wpdb->last_error);
             }
 
             $this->sentCount++;
@@ -91,7 +93,12 @@ abstract class BaseHandler
 
             $this->dispatchedWithinOneSecond++;
 
-            if (is_wp_error($response)) {
+            // wp_mail() returns false on failure (not WP_Error) in most cases.
+            // We must catch both to avoid marking undelivered emails as 'sent'.
+            // Note: emails are marked 'sent' BEFORE wp_mail() by design to prevent
+            // duplicate sends on crash. This is intentional — losing one email is
+            // acceptable, sending duplicates is not.
+            if (is_wp_error($response) || $response === false) {
                 $failedIds[] = $email->id;
             }
         }
@@ -110,18 +117,16 @@ abstract class BaseHandler
     protected function processBatchEmails()
     {
         if ($this->isTimeUp()) {
-            update_option($this->optionKey, null);
             return 'time_up';
         }
 
         $emails = $this->getNextBatchEmails();
 
         if (!$emails || $emails->isEmpty()) {
-            update_option($this->optionKey, null);
             return 'empty';
         }
 
-        $this->processing();
+        $this->refreshLock();
         $result = $this->sendEmails($emails);
 
         if (is_wp_error($result)) {
@@ -188,11 +193,10 @@ abstract class BaseHandler
             return false;
         }
 
-        fluentCrmDb()->table('fc_campaign_emails')
-            ->whereIn('id', $ids)
-            ->update([
-                'status' => $status
-            ]);
+        global $wpdb;
+        $whereIn = implode(',', array_fill(0, count($ids), '%d'));
+        $query = "UPDATE {$wpdb->prefix}fc_campaign_emails SET status = %s WHERE id IN ($whereIn)";
+        $wpdb->query($wpdb->prepare($query, array_merge([$status], $ids)));
 
         return true;
     }
@@ -208,13 +212,14 @@ abstract class BaseHandler
                 }
             }
 
-            if (!$to) {
+            if (!$to || !\is_string($to) || !is_email($to)) {
                 return;
             }
 
             CampaignEmail::where('email_address', $to)
                 ->limit(1)
-                ->orderBy('id', 'DESC')
+                ->whereIn('status', ['processing', 'sent', 'failed'])
+                ->orderBy('updated_at', 'DESC')
                 ->update([
                     'status' => 'failed',
                     'note'   => $error->get_error_message()
@@ -240,7 +245,7 @@ abstract class BaseHandler
             $limit = 4;
         }
 
-        if ($this->isMultiThread) {
+        if ($this->isMultiThread && $limit > 8) {
             $limit = ceil($limit / 2);
         }
 
@@ -251,33 +256,81 @@ abstract class BaseHandler
         return $this->emailLimitPerSecond;
     }
 
-    protected function isProcessing()
+    /**
+     * Atomically acquire the processing lock.
+     *
+     * Replaces the old isProcessing() + processing() two-step pattern
+     * which had a TOCTOU race condition — two processes could both read
+     * "not processing" and both start sending emails.
+     *
+     * @return bool True if the lock was acquired, false if another process holds it.
+     */
+    protected function acquireLock()
     {
-        $lastProcessStartedAt = get_option($this->optionKey);
+        $now = time();
+        $lockTimeout = $this->maximumProcessingTime + 30;
 
-        if (!$lastProcessStartedAt) {
+        if (wp_using_ext_object_cache()) {
+            // wp_cache_add() is atomic — only succeeds if key doesn't exist.
+            // TTL handles auto-expiry of stuck locks.
+            if (wp_cache_add($this->optionKey, $now, 'fc_instant_options', $lockTimeout)) {
+                return true;
+            }
+
+            // Key exists — check if the lock has expired (process died)
+            $existing = wp_cache_get($this->optionKey, 'fc_instant_options');
+            if ($existing && ($now - (int)$existing) > $lockTimeout) {
+                // Delete stale key, then re-acquire atomically via wp_cache_add()
+                wp_cache_delete($this->optionKey, 'fc_instant_options');
+                if (wp_cache_add($this->optionKey, $now, 'fc_instant_options', $lockTimeout)) {
+                    return true;
+                }
+            }
+
             return false;
         }
 
-        if ($this->seemsStuck($lastProcessStartedAt)) {
-            return false;
-        }
+        // Database path: single atomic UPDATE on wp_options
+        global $wpdb;
 
-        return true;
-    }
+        // Ensure the option row exists (INSERT IGNORE is idempotent)
+        $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)",
+            $this->optionKey, '', 'no'
+        ));
 
-    protected function seemsStuck($lastProcessStartedAt)
-    {
-        if ($lastProcessStartedAt && time() - $lastProcessStartedAt > 80) {
-            $this->processing();
+        // Atomic: claim lock only if free (empty value) or expired (old timestamp)
+        $affected = $wpdb->query($wpdb->prepare(
+            "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND (option_value = '' OR option_value < %d)",
+            (string)$now, $this->optionKey, $now - $lockTimeout
+        ));
+
+        if ($affected > 0) {
+            wp_cache_delete($this->optionKey, 'options');
             return true;
         }
 
         return false;
     }
 
-    protected function processing()
+    /**
+     * Refresh the lock timestamp (heartbeat) to prevent stuck-lock detection.
+     */
+    protected function refreshLock()
     {
-        update_option($this->optionKey, time());
+        $lockTimeout = $this->maximumProcessingTime + 30;
+        Helper::setInstantOption($this->optionKey, time(), $lockTimeout);
+    }
+
+    /**
+     * Release the processing lock so another process can acquire it.
+     */
+    protected function releaseLock()
+    {
+        if (wp_using_ext_object_cache()) {
+            wp_cache_delete($this->optionKey, 'fc_instant_options');
+        } else {
+            update_option($this->optionKey, '', false);
+        }
     }
 }

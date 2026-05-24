@@ -54,7 +54,6 @@ class CartHelper
 
             return $options;
         } catch (\Exception $e) {
-            error_log($e->getMessage());
             return [];
         }
     }
@@ -71,7 +70,6 @@ class CartHelper
                 })
                 ->toArray();
         } catch (\Exception $e) {
-            error_log($e->getMessage());
             $coupons = [];
         }
 
@@ -101,7 +99,6 @@ class CartHelper
                 })
                 ->toArray();
         } catch (\Exception $e) {
-            error_log($e->getMessage());
             $categories = [];
         }
 
@@ -117,7 +114,6 @@ class CartHelper
                 return $product->wp_terms->pluck('term_taxonomy_id');
             })->unique()->values()->toArray();
         } catch (\Exception $e) {
-            error_log($e->getMessage());
             $categories = [];
         }
 
@@ -167,12 +163,11 @@ class CartHelper
             }
             return $formatted;
         } catch (\Exception $e) {
-            error_log($e->getMessage());
             return [];
         }
     }
 
-    public static function prepareSubsciberData($customer)
+    public static function prepareSubscriberData($customer)
     {
         if(!is_object($customer)) {
             $customer = (object) $customer;
@@ -201,7 +196,6 @@ class CartHelper
             })->offset($offset)->limit($limit)->get();
 
         } catch (\Exception $e) {
-            error_log($e->getMessage());
         }
 
         return $customers;
@@ -219,7 +213,6 @@ class CartHelper
                 ->whereIn('order_id', $orderIds)
                 ->pluck('post_id');
         } catch (\Exception $e) {
-            error_log($e->getMessage());
         }
 
         return $productIds;

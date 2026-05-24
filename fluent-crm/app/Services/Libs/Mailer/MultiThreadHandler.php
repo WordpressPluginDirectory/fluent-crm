@@ -5,6 +5,7 @@ namespace FluentCrm\App\Services\Libs\Mailer;
 use FluentCrm\App\Models\CampaignEmail;
 use FluentCrm\App\Services\Helper;
 use FluentCrm\Framework\Support\Arr;
+use FluentCrm\Framework\Support\Collection;
 
 class MultiThreadHandler extends BaseHandler
 {
@@ -17,6 +18,31 @@ class MultiThreadHandler extends BaseHandler
 
     protected $optionKey = 'fluentcrm_is_sending_multi_emails';
 
+    public function __construct()
+    {
+        /**
+         * The mailer chunk size for the multi-thread email handler.
+         *
+         * @param int $sendingPerChunk Number of campaign emails pulled per batch. Default is 20.
+         * @return int
+         */
+        $sendingPerChunk = (int)apply_filters('fluent_crm/mailer_multi_thread_chunk_size', $this->sendingPerChunk);
+        if ($sendingPerChunk > 0) {
+            $this->sendingPerChunk = $sendingPerChunk;
+        }
+
+        /**
+         * The maximum processing window (seconds) for the multi-thread email handler.
+         *
+         * @param int $maximumProcessingTime Max loop runtime in seconds. Default is 50.
+         * @return int
+         */
+        $maximumProcessingTime = (int)apply_filters('fluent_crm/mailer_multi_thread_max_processing_seconds', $this->maximumProcessingTime);
+        if ($maximumProcessingTime > 0) {
+            $this->maximumProcessingTime = $maximumProcessingTime;
+        }
+    }
+
     public function handle()
     {
         if (!$this->isSystemOk()) {
@@ -26,18 +52,18 @@ class MultiThreadHandler extends BaseHandler
         Helper::maybeDisableEmojiOnEmail();
 
         try {
-            $this->processing();
             $this->handleFailedLog();
             $this->startedAt = microtime(true);
             $result = $this->processBatchEmails();
 
             if (is_wp_error($result)) {
-                update_option($this->optionKey, null);
+                $this->releaseLock();
                 $this->logSentCount();
                 return true;
             }
 
             if ($result === 'time_up') {
+                $this->releaseLock();
                 $this->callBackGround();
                 $this->logSentCount();
                 return true;
@@ -47,8 +73,7 @@ class MultiThreadHandler extends BaseHandler
         }
 
         $this->logSentCount();
-
-        update_option($this->optionKey, null);
+        $this->releaseLock();
         return true;
     }
 
@@ -56,9 +81,7 @@ class MultiThreadHandler extends BaseHandler
     {
         $this->calledFrom = Arr::get($_REQUEST, 'action') == 'fluentcrm-post-multi-thread-send-now' ? 'ajax' : 'cron';
 
-        if ($this->calledFrom == 'cron') {
-            fluentcrm_update_option($this->optionKey . '_last_called', time());
-        }
+        fluentcrm_update_option($this->optionKey . '_last_called', time());
 
         if (
             did_action('fluent_crm/sending_multi_threading_email') ||
@@ -80,13 +103,17 @@ class MultiThreadHandler extends BaseHandler
         $this->isMultiThread = true;
         $this->startingTimeStamp = time();
 
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($this->maximumProcessingTime + 30);
+        }
+
         $systemMaxProcessingTime = fluentCrmMaxRunTime();
 
         if ($this->maximumProcessingTime > $systemMaxProcessingTime) {
             $this->maximumProcessingTime = $systemMaxProcessingTime;
         }
 
-        if ($this->isProcessing()) {
+        if (!$this->acquireLock()) {
             return false;
         }
 
@@ -95,27 +122,54 @@ class MultiThreadHandler extends BaseHandler
 
     protected function getNextBatchEmails()
     {
+        global $wpdb;
+        $table = $wpdb->prefix . 'fc_campaign_emails';
         $currentTime = current_time('mysql');
-        $emails = CampaignEmail::whereIn('status', ['pending', 'scheduled'])
-            ->where('scheduled_at', '<=', $currentTime)
-            ->with('campaign', 'subscriber')
-            ->orderBy('scheduled_at', 'DESC')
-            ->offset(250)
-            ->limit($this->sendingPerChunk)
-            ->get();
 
-        $ids = $emails->pluck('id')->toArray();
-
-        if ($ids) {
-            fluentCrmDb()->table('fc_campaign_emails')
-                ->whereIn('id', $ids)
-                ->update([
-                    'status'     => 'processing',
-                    'updated_at' => $currentTime
-                ]);
+        /**
+         * Filter the queue offset used by the multi-thread email handler.
+         *
+         * @param int $offset Queue offset. Default is 250.
+         * @return int
+         */
+        $offset = (int)apply_filters('fluent_crm/mailer_multi_thread_offset', 250);
+        if ($offset < 0) {
+            $offset = 0;
         }
 
-        return $emails;
+        $wpdb->query('START TRANSACTION');
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT id FROM {$table} WHERE status IN ('pending', 'scheduled') AND scheduled_at <= %s ORDER BY scheduled_at DESC LIMIT %d, %d FOR UPDATE",
+            $currentTime, $offset, $this->sendingPerChunk
+        ));
+
+        $ids = wp_list_pluck($rows, 'id');
+
+        if ($ids) {
+            $idsPlaceholder = implode(',', array_fill(0, count($ids), '%d'));
+            $result = $wpdb->query($wpdb->prepare(
+                "UPDATE {$table} SET status = 'processing', updated_at = %s WHERE id IN ($idsPlaceholder) AND status IN ('pending', 'scheduled')",
+                array_merge([$currentTime], $ids)
+            ));
+
+            if ($result === false) {
+                $wpdb->query('ROLLBACK');
+                return new Collection([]);
+            }
+        }
+
+        $wpdb->query('COMMIT');
+
+        if (!$ids) {
+            return new Collection([]);
+        }
+
+        // Only return rows we actually claimed (status = processing)
+        return CampaignEmail::whereIn('id', $ids)
+            ->where('status', 'processing')
+            ->with('campaign', 'subscriber')
+            ->get();
     }
 
     protected function isTimeUp()
@@ -141,16 +195,15 @@ class MultiThreadHandler extends BaseHandler
             }
         }
 
-        if ($willRun) { // If next cron is after more than 5 seconds we want to run this or it's running
-            wp_remote_post(admin_url('admin-ajax.php'), [
-                'sslverify' => false,
-                'blocking'  => false,
-                'body'      => [
-                    'campaign_id' => null,
-                    'retry'       => 1,
-                    'time'        => time(),
-                    'action'      => 'fluentcrm-post-multi-thread-send-now'
-                ]
+        if ($willRun) {
+            $url = add_query_arg([
+                'action' => 'fluentcrm-post-multi-thread-send-now',
+                'time'   => time()
+            ], admin_url('admin-ajax.php'));
+
+            Handler::fireNonBlockingRequest($url, [
+                'campaign_id' => null,
+                'retry'       => 1
             ]);
         }
     }

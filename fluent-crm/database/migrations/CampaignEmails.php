@@ -20,7 +20,9 @@ class CampaignEmails
 
         $indexPrefix = $wpdb->prefix . 'fc_cam_';
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         if ($wpdb->get_var("SHOW TABLES LIKE '$table'") != $table) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $sql = "CREATE TABLE $table (
                 `id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
                 `campaign_id` BIGINT UNSIGNED NULL,
@@ -40,34 +42,66 @@ class CampaignEmails
                 `email_hash` VARCHAR(192) NULL,
                 `created_at` TIMESTAMP NULL,
                 `updated_at` TIMESTAMP NULL,
-                INDEX `{$indexPrefix}_cid_idx` (`campaign_id` ASC),
                 INDEX `{$indexPrefix}_sid_idx` (`subscriber_id` ASC),
                 INDEX `{$indexPrefix}_et_idx` (`email_type` ASC),
-                INDEX `{$indexPrefix}_estidx` (`status` ASC),
                 INDEX `{$indexPrefix}_emtidx` (`email_hash` ASC),
-                INDEX `{$indexPrefix}_scheduled_at` (`scheduled_at`),
                 INDEX `{$indexPrefix}_updated_at` (`updated_at`),
-                INDEX `{$indexPrefix}sc_at_status` (`scheduled_at`, `status`)
+                INDEX `{$indexPrefix}status_sc_at` (`status`, `scheduled_at`),
+                INDEX `{$indexPrefix}cid_status` (`campaign_id`, `status`)
             ) $charsetCollate;";
 
             dbDelta($sql);
         } else {
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $indexes = $wpdb->get_results("SHOW INDEX FROM $table");
             $indexedColumns = [];
+            $indexNames = [];
             foreach ($indexes as $index) {
                 $indexedColumns[] = $index->Column_name;
+                $indexNames[] = $index->Key_name;
             }
 
             if(!in_array('scheduled_at', $indexedColumns)) {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                 $wpdb->query("ALTER TABLE {$table} ADD INDEX `scheduled_at` (`scheduled_at`);");
             }
 
             if(!in_array('updated_at', $indexedColumns)) {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                 $wpdb->query("ALTER TABLE {$table} ADD INDEX {$indexPrefix}_updated_at (`updated_at`);");
             }
 
             if(!in_array('email_hash', $indexedColumns)) {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
                 $wpdb->query("ALTER TABLE {$table} ADD INDEX `{$indexPrefix}_emtidx` (`email_hash`);");
+            }
+
+            // Composite index for batch email queries: WHERE status IN (...) AND scheduled_at <= ? ORDER BY scheduled_at
+            if (!in_array($indexPrefix . 'status_sc_at', $indexNames)) {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $wpdb->query("ALTER TABLE {$table} ADD INDEX `{$indexPrefix}status_sc_at` (`status`, `scheduled_at`);");
+            }
+
+            // Composite index for campaign-scoped queries: WHERE campaign_id = ? AND status = ?
+            if (!in_array($indexPrefix . 'cid_status', $indexNames)) {
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $wpdb->query("ALTER TABLE {$table} ADD INDEX `{$indexPrefix}cid_status` (`campaign_id`, `status`);");
+            }
+
+            // Drop redundant single-column indexes now covered by composite indexes
+            $redundantIndexes = [
+                $indexPrefix . '_estidx',      // status — covered by (status, scheduled_at)
+                $indexPrefix . '_scheduled_at', // scheduled_at (prefixed) — covered by (status, scheduled_at)
+                'scheduled_at',                 // scheduled_at (unprefixed, from earlier migration) — covered by (status, scheduled_at)
+                $indexPrefix . '_cid_idx',      // campaign_id — covered by (campaign_id, status)
+                $indexPrefix . 'sc_at_status',  // (scheduled_at, status) — wrong column order
+            ];
+
+            foreach ($redundantIndexes as $indexName) {
+                if (in_array($indexName, $indexNames)) {
+                    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                    $wpdb->query("ALTER TABLE {$table} DROP INDEX `{$indexName}`");
+                }
             }
         }
     }

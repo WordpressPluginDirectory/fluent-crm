@@ -65,11 +65,12 @@ class Commands
         );
     }
 
+    /**
+     * Sync EDD 3 customers into FluentCRM commerce tables from EDD order data.
+     */
     public function sync_edd_customers($args, $assoc_args)
     {
-        if (!class_exists('\Easy_Digital_Downloads')) {
-            \WP_CLI::error('Easy Digital Downloads is not installed');
-        }
+        $this->requireEdd3Cli();
 
         $tags = \WP_CLI\Utils\get_flag_value($assoc_args, 'tags', '');
         $lists = \WP_CLI\Utils\get_flag_value($assoc_args, 'lists', '');
@@ -130,15 +131,17 @@ class Commands
             [
                 [
                     'status' => __('Completed', 'fluent-crm'),
-                    'count'  => fluentCrmDb()->table('posts')->where('post_type', 'edd_payment')->where('post_status', 'publish')->count()
+                    'count'  => fluentCrmDb()->table('edd_orders')
+                        ->whereIn('status', ['complete', 'completed'])
+                        ->count()
                 ],
                 [
                     'status' => __('Processing', 'fluent-crm'),
-                    'count'  => fluentCrmDb()->table('posts')->where('post_type', 'edd_payment')->where('post_status', 'processing')->count()
+                    'count'  => fluentCrmDb()->table('edd_orders')->where('status', 'processing')->count()
                 ],
                 [
                     'status' => __('Subscription Payments', 'fluent-crm'),
-                    'count'  => fluentCrmDb()->table('posts')->where('post_type', 'edd_payment')->where('post_status', 'edd_subscription')->count()
+                    'count'  => fluentCrmDb()->table('edd_orders')->where('status', 'edd_subscription')->count()
                 ],
                 [
                     'status' => __('Customer Counts', 'fluent-crm'),
@@ -185,6 +188,8 @@ class Commands
 
         $skippedContacts = [];
         $resultItems = [];
+        // EDD 3 sync reads canonical edd_orders statuses only.
+        $paymentStatuses = ['edd_subscription', 'processing', 'complete', 'completed', 'partially_refunded'];
         $progress = \WP_CLI\Utils\make_progress_bar('Synced Customers', $customersTotal);
 
         while ($processingStatus) {
@@ -195,11 +200,17 @@ class Commands
 
             $offset += $limit;
 
-            if (!$customers) {
+            if ($customers->isEmpty()) {
                 $processingStatus = false;
             } else {
                 foreach ($customers as $customer) {
-                    $result = \FluentCampaign\App\Services\Integrations\Edd\EddCommerceHelper::syncCommerceCustomer($customer, $contactStatus, ['edd_subscription', 'processing', 'publish'], $formattedTags, $formattedLists);
+                    $result = \FluentCampaign\App\Services\Integrations\Edd\EddCommerceHelper::syncCommerceCustomer(
+                        $customer,
+                        $contactStatus,
+                        $paymentStatuses,
+                        $formattedTags,
+                        $formattedLists
+                    );
                     if ($result) {
                         $progress->tick();
                         $resultItems[] = [
@@ -229,6 +240,7 @@ class Commands
         if ($skippedContacts) {
             \WP_CLI::line(sprintf('%d contacts has been skipped', count($skippedContacts)));
 
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
             fwrite(STDOUT, 'Show Skipped contacts? yes/no' . ' ');
             $value = strtolower(trim(fgets(STDIN)));
 
@@ -245,8 +257,13 @@ class Commands
 
     }
 
+    /**
+     * Remove synced EDD commerce data only when EDD 3 is available.
+     */
     public function disable_edd_sync()
     {
+        $this->requireEdd3Cli();
+
         $module = 'edd';
         Commerce::disableModule($module);
         ContactRelationModel::provider($module)->delete();
@@ -332,6 +349,7 @@ class Commands
                 // ask if they want to resume
                 \WP_CLI::line(sprintf('Looks like you have migrated %d customers already.', $completedCount));
                 // Adding space to question and showing it.
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
                 fwrite(STDOUT, 'Do you want to resume? Type YES to resume or type NO start from scratch: ' . ' ');
 
                 $result = strtolower(trim(fgets(STDIN)));
@@ -413,7 +431,7 @@ class Commands
 
             $offset += 10;
 
-            if (!$customers) {
+            if ($customers->isEmpty()) {
                 $processingStatus = false;
             } else {
                 foreach ($customers as $customer) {
@@ -448,6 +466,7 @@ class Commands
         if ($skippedContacts) {
             \WP_CLI::line(sprintf('%d contacts has been skipped', count($skippedContacts)));
 
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
             fwrite(STDOUT, 'Show Skipped contacts? yes/no' . ': ');
             $value = strtolower(trim(fgets(STDIN)));
 
@@ -631,7 +650,7 @@ class Commands
 
             $offset += 10;
 
-            if (!$students) {
+            if ($students->isEmpty()) {
                 $processingStatus = false;
             } else {
                 foreach ($students as $student) {
@@ -654,6 +673,7 @@ class Commands
         if ($skippedContacts) {
             \WP_CLI::line(sprintf('%d contacts has been skipped', count($skippedContacts)));
 
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
             fwrite(STDOUT, 'Show Skipped contacts? yes/no' . ': ');
             $value = strtolower(trim(fgets(STDIN)));
 
@@ -669,14 +689,15 @@ class Commands
         \WP_CLI::line('Nice. All Done');
     }
 
+    /**
+     * Display EDD 3 commerce statistics from synced FluentCRM commerce data.
+     */
     public function edd_stats($args, $assoc_args)
     {
 
         $isHelp = $type = \WP_CLI\Utils\get_flag_value($assoc_args, 'commands', '');
 
-        if (!class_exists('\Easy_Digital_Downloads')) {
-            \WP_CLI::error('Easy Digital Downloads is not installed');
-        }
+        $this->requireEdd3Cli();
 
         if (!defined('FLUENTCAMPAIGN')) {
             \WP_CLI::error('FluentCRM Pro is required');
@@ -771,6 +792,7 @@ class Commands
 
         \WP_CLI::confirm('Do you really want to remove all the contacts and related data?');
 
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
         fwrite(STDOUT, 'Please Type "yes" if you really want to do this? yes/no' . ': ');
         $value = strtolower(trim(fgets(STDIN)));
 
@@ -804,6 +826,7 @@ class Commands
         global $wpdb;
         foreach ($tables as $table) {
             \WP_CLI::line('Droping Table: ' . $table);
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared WordPress.DB.PreparedSQL.NotPrepared
             $wpdb->query("DROP TABLE IF EXISTS " . $wpdb->prefix . $table);
         }
         $options = [
@@ -824,8 +847,13 @@ class Commands
         \WP_CLI::line('All FluentCRM Database Tables have been truncated');
     }
 
+    /**
+     * Apply a FluentCRM tag to users with active lifetime EDD 3 licenses.
+     */
     public function edd_add_ltd_tag($args, $assoc_args)
     {
+        $this->requireEdd3Cli();
+
         if (empty($assoc_args) || count($assoc_args) != 2) {
             \WP_CLI::line('use --product=productId --tag=tagID');
             return;
@@ -863,7 +891,7 @@ class Commands
             return;
         }
 
-        if (!$licenses) {
+        if ($licenses->isEmpty()) {
             \WP_CLI::line('No users found');
             return;
         }
@@ -893,8 +921,13 @@ class Commands
 
     }
 
+    /**
+     * Apply a FluentCRM tag to users with active EDD 3 licenses for a price option.
+     */
     public function edd_add_price_tag($args, $assoc_args)
     {
+        $this->requireEdd3Cli();
+
         if (empty($assoc_args) || count($assoc_args) != 3) {
             \WP_CLI::line('use --product=productId --price_id=PRICEID --tag=tagID');
             return;
@@ -928,7 +961,7 @@ class Commands
             return;
         }
 
-        if (!$licenses) {
+        if ($licenses->isEmpty()) {
             \WP_CLI::line('No users found');
             return;
         }
@@ -955,6 +988,16 @@ class Commands
         }
 
         \WP_CLI::line('Total Done: ' . $completedCount);
+    }
+
+    /**
+     * Stop EDD CLI flows before they touch legacy EDD 2 data or tables.
+     */
+    private function requireEdd3Cli()
+    {
+        if (!Helper::isEdd3()) {
+            \WP_CLI::error('Easy Digital Downloads 3 is required');
+        }
     }
 
     /*
@@ -1093,6 +1136,11 @@ class Commands
         }
 
         \WP_CLI::line('User ids for contacts has been synced');
+    }
+
+    public function simulate_funnel($args, $assoc_args)
+    {
+        (new SimulateFunnelCommand())->handle($args, $assoc_args);
     }
 
 }

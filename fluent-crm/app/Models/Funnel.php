@@ -17,13 +17,6 @@ class Funnel extends Model
 
     protected $table = 'fc_funnels';
 
-    protected $guarded = ['id'];
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
         'type',
         'title',
@@ -111,63 +104,6 @@ class Funnel extends Model
         fluentcrm_delete_meta($this->id, __CLASS__, $key);
     }
 
-//    public function applyLabels($newLabels)
-//    {
-//        $existingLabelMeta = $this->getLabelMeta();
-//
-//        if ($existingLabelMeta) {
-//            $mergedLabels = array_unique(array_merge((array) $existingLabelMeta->value, $newLabels));
-//            $existingLabelMeta->value = $mergedLabels;
-//            $existingLabelMeta->save();
-//        } else {
-//            Meta::create([
-//                'object_type' => self::class,
-//                'object_id'   => $this->id,
-//                'key'         => 'funnel_label',
-//                'value'       => $newLabels
-//            ]);
-//        }
-//    }
-
-//    public function getLabelMeta()
-//    {
-//        return Meta::where('object_type', __CLASS__)
-//            ->where('object_id', $this->id)
-//            ->where('key', 'funnel_label')
-//            ->first();
-//    }
-
-    public function updateOrDeleteLabel($updatedLabels)
-    {
-        $labelMeta = $this->getLabelMeta();
-
-        if ($labelMeta) {
-            $labelMeta->value = $updatedLabels;
-            $labelMeta->save();
-
-            if (empty($labelMeta->value)) {
-                $labelMeta->delete();
-            }
-        }
-    }
-
-    public static function removeLabelFromAllFunnels($slug)
-    {
-        $funnels = Meta::where('object_type', self::class)
-            ->where('key', 'funnel_label')
-            ->get();
-
-        foreach ($funnels as $funnelLabelMeta) {
-            $updatedLabels = array_diff((array) $funnelLabelMeta->value, [$slug]);
-
-            if (!empty($updatedLabels)) {
-                $funnelLabelMeta->value = $updatedLabels;
-                $funnelLabelMeta->save();
-            } else {
-                $funnelLabelMeta->delete();
-            }
-        }
-    }
     public function labelsTerm()
     {
         return $this->belongsToMany(Label::class, 'fc_term_relations', 'object_id', 'term_id')

@@ -108,10 +108,12 @@ class CartImporter
 
         $importType = 'customers_sync';
 
-        $importTitle = sprintf(__('Sync %s Customers Now', 'fluent-crm'), self::getPluginName());
+    /* translators: %s: the external commerce plugin name */
+    $importTitle = sprintf(__('Sync %s Customers Now', 'fluent-crm'), self::getPluginName());
 
         if(defined('FLUENTCART_VERSION')) {
             $importType = 'product_tags';
+            /* translators: %s: the external commerce plugin name */
             $importTitle = sprintf(__('Import %s Customers Now', 'fluent-crm'), self::getPluginName());
         }
 
@@ -127,12 +129,14 @@ class CartImporter
             ],
             'fields' => [
                 'product_type_maps' => [
-                    'label'              => __('Please map your Product and associate FluentCRM Tags', 'fluentcampaign-pro'),
+                    'label'              => __('Please map your Product and associate FluentCRM Tags', 'fluent-crm'),
                     'type'               => 'form-many-drop-down-mapper',
-                    'local_label'        => sprintf(__('Select %s Product', 'fluentcampaign-pro'), self::getPluginName()),
-                    'remote_label'       => __('Select FluentCRM Tag that will be applied', 'fluentcampaign-pro'),
-                    'local_placeholder'  => sprintf(__('Select %s Product', 'fluentcampaign-pro'), self::getPluginName()),
-                    'remote_placeholder' => __('Select FluentCRM Tag', 'fluentcampaign-pro'),
+                    /* translators: %s: the external commerce plugin name */
+                    'local_label'        => sprintf(__('Select %s Product', 'fluent-crm'), self::getPluginName()),
+                    'remote_label'       => __('Select FluentCRM Tag that will be applied', 'fluent-crm'),
+                    /* translators: %s: the external commerce plugin name */
+                    'local_placeholder'  => sprintf(__('Select %s Product', 'fluent-crm'), self::getPluginName()),
+                    'remote_placeholder' => __('Select FluentCRM Tag', 'fluent-crm'),
                     'field_ajax_selector' => [
                         'option_key' => 'fluent_cart_products'
                     ],
@@ -148,7 +152,7 @@ class CartImporter
                 ],
                 'sync_import_html'  => [
                     'type'       => 'html-viewer',
-                    'heading'    => 'FluentCart Data Sync',
+                    'heading'    => __('FluentCart Data Sync', 'fluent-crm'),
                     'info'       => __('You can sync all your FluentCart Customers into FluentCRM and all future customers and purchase data will be synced.', 'fluent-crm').'<br />'.__('After this sync you can import by product by product and provide appropriate tags', 'fluent-crm'),
                     'dependency' => [
                         'depends_on' => 'import_type',
@@ -231,7 +235,7 @@ class CartImporter
         $importedCustomers = [];
         // pushing all customers without tags
         foreach ($customers as $customer) {
-            $subscribers = CartHelper::prepareSubsciberData($customer);
+            $subscribers = CartHelper::prepareSubscriberData($customer);
             if($customer->user_id) {
                 $subscribers = Helper::getWPMapUserInfo($customer->user_id);
             }
@@ -297,7 +301,8 @@ class CartImporter
     {
         $allProductsIds =  CartHelper::getPurchasedProductsByCustomerId($customerId);
         // check in products
-        return array_intersect($allProductsIds, $productIds); // return only those products which are in productIds
+        // getPurchasedProductsByCustomerId() returns a Collection via pluck(), convert to array for array_intersect()
+        return array_intersect($allProductsIds->toArray(), $productIds); // return only those products which are in productIds
     }
 
     private static function getSyncStatus()

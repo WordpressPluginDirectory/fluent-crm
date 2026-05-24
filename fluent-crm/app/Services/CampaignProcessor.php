@@ -14,18 +14,14 @@ class CampaignProcessor
     public function __construct($campaignId)
     {
         $this->campaignId = $campaignId;
-        /*
-         * We want to send emails real time if memory limit is more than 500MB and current usage is less than 60%
-         * otherwise, they are scheduled for background processing
-         */
-        if (fluentCrmGetMemoryLimit() > 510000000 && !fluentCrmIsMemoryExceeded(60)) {
-            $this->initialStatus = 'scheduled';
-        }
+
+        // Always create rows as 'scheduling' — they become 'scheduled' (sendable)
+        // only after ALL rows are created. This ensures clean phase separation:
+        // processing completes fully, then sending begins with accurate totals.
     }
 
     /*
      * By Default, this function will process emails in chunks of 30 (customizable) and run for max 30 seconds per processing cycle
-     * Sleep for 200ms between each cycle
      * @param int $perChunk
      * @param int $runTime
      * @return Campaign|false
@@ -59,7 +55,7 @@ class CampaignProcessor
              * in each request when processing campaigns.
              *
              * @since 2.7.0
-             * 
+             *
              * @param int The number of subscribers to process per request. Default is 30.
              */
             $perChunk = (int)apply_filters('fluent_crm/process_subscribers_per_request', 30);
@@ -71,15 +67,12 @@ class CampaignProcessor
             return false;
         }
 
-        /*
-         * Prevent Multiple Jobs here
-         */
-        $lastProcess = (int)fluentcrm_get_campaign_meta($campaign->id, '_processing_emails', true);
-        if ($lastProcess && (time() - $lastProcess) < 55) {
-            return $campaign;
+        if (!$this->acquireProcessingLock()) {
+            // Return false (not $campaign) so the caller doesn't fire
+            // another AJAX chain while the lock is held by another process.
+            return false;
         }
 
-        fluentcrm_update_campaign_meta($campaign->id, '_processing_emails', time());
         $subscribersModel = $subscribersModel->limit($perChunk)->offset($campaign->recipients_count);
 
         $result = $this->subscribe($campaign, $subscribersModel);
@@ -87,18 +80,18 @@ class CampaignProcessor
         $willRun = !!$result;
 
         while ($willRun && ((microtime(true) - $startTime) < $runTime) && !fluentCrmIsMemoryExceeded()) {
-            usleep(200000); // 200 miliseconds sleep
+            usleep(10000); // 10 milliseconds sleep
             $campaign = Campaign::withoutGlobalScope('type')->find($campaign->id);
             $willRun = !!$result;
 
             if ($willRun) {
-                fluentcrm_update_campaign_meta($campaign->id, '_processing_emails', time());
+                $this->refreshProcessingLock();
                 $subscribersModel = $subscribersModel->limit($perChunk)->offset($campaign->recipients_count);
                 $result = $this->subscribe($campaign, $subscribersModel);
             }
         }
 
-        fluentcrm_update_campaign_meta($campaign->id, '_processing_emails', 0);
+        $this->releaseProcessingLock();
 
         if (!$result) { // All Done. Let's make it scheduled
             $campaign = Campaign::withoutGlobalScope('type')->find($this->campaignId);
@@ -129,8 +122,74 @@ class CampaignProcessor
 
         return $campaign->subscribe($subscribers, [
             'status'       => $this->initialStatus,
-            'scheduled_at' => $campaign->getEmailScheduleAt()
+            'scheduled_at' => $campaign->getEmailScheduleAt(),
         ], true);
+    }
+
+    /**
+     * Atomically acquire the processing lock for this campaign.
+     *
+     * Uses fc_meta table with the '_processing_emails' key. The lock row
+     * is created on first acquire and reused. A single UPDATE with a WHERE
+     * clause prevents TOCTOU race conditions.
+     *
+     * @return bool True if lock acquired, false if another process holds it.
+     */
+    private function acquireProcessingLock()
+    {
+        global $wpdb;
+        $table = $wpdb->prefix . 'fc_meta';
+        $now = (string)time();
+        $lockTimeout = 90;
+        $key = '_processing_emails';
+        $objectType = 'FluentCrm\App\Models\Campaign';
+
+        // Try atomic UPDATE on existing row: claim if free (0/empty) or expired
+        $affected = $wpdb->query($wpdb->prepare(
+            "UPDATE {$table} SET `value` = %s WHERE `object_id` = %d AND `object_type` = %s AND `key` = %s AND (`value` = '' OR `value` = '0' OR `value` < %d)",
+            $now, $this->campaignId, $objectType, $key, time() - $lockTimeout
+        ));
+
+        if ($affected > 0) {
+            return true;
+        }
+
+        // Row might not exist yet — create it then retry the atomic UPDATE
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table} WHERE `object_id` = %d AND `object_type` = %s AND `key` = %s",
+            $this->campaignId, $objectType, $key
+        ));
+
+        if (!$exists) {
+            // Create the row with value '0' (unlocked), then retry atomic claim
+            fluentcrm_update_campaign_meta($this->campaignId, $key, '0');
+
+            $affected = $wpdb->query($wpdb->prepare(
+                "UPDATE {$table} SET `value` = %s WHERE `object_id` = %d AND `object_type` = %s AND `key` = %s AND (`value` = '' OR `value` = '0' OR `value` < %d)",
+                $now, $this->campaignId, $objectType, $key, time() - $lockTimeout
+            ));
+
+            return $affected > 0;
+        }
+
+        // Row exists but lock is held by another process
+        return false;
+    }
+
+    /**
+     * Refresh the lock timestamp to prevent stale-lock detection.
+     */
+    private function refreshProcessingLock()
+    {
+        fluentcrm_update_campaign_meta($this->campaignId, '_processing_emails', (string)time());
+    }
+
+    /**
+     * Release the processing lock.
+     */
+    private function releaseProcessingLock()
+    {
+        fluentcrm_update_campaign_meta($this->campaignId, '_processing_emails', 0);
     }
 
     public function getSchedulingMethod()

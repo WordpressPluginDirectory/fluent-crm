@@ -263,6 +263,7 @@ class Contacts
             return call_user_func_array([$this->instance, $method], $params);
         }
 
-        throw new \Exception("Method {$method} does not exist.");
+        /* translators: %s: method name */
+        throw new \Exception(sprintf('Method %s does not exist.', esc_html($method)));
     }
 }

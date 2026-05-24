@@ -25,7 +25,7 @@ class OrderStatusChangedTrigger extends BaseTrigger
             'category' => __('FluentCart', 'fluent-crm'),
             'label' => __('Order Status Changed', 'fluent-crm'),
             'description' => __('This funnel will start when an order status updates', 'fluent-crm'),
-            'custom_icon' => 'fluentcart', // as svg
+            'svg' => '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="24px" height="24px" viewBox="0 0 24 24" version="1.1"><g id="surface1"><path style=" stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;" d="M 2.398438 0 L 21.601562 0 C 22.925781 0 24 1.074219 24 2.398438 L 24 21.601562 C 24 22.925781 22.925781 24 21.601562 24 L 2.398438 24 C 1.074219 24 0 22.925781 0 21.601562 L 0 2.398438 C 0 1.074219 1.074219 0 2.398438 0 Z M 2.398438 0 "/><path style=" stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,62.352943%);fill-opacity:1;" d="M 10.925781 16.476562 L 3.769531 16.476562 L 4.894531 13.878906 C 5.222656 13.117188 5.972656 12.625 6.804688 12.625 L 15.328125 12.625 L 14.746094 13.964844 C 14.085938 15.488281 12.585938 16.476562 10.925781 16.476562 Z M 10.925781 16.476562 "/><path style=" stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,62.352943%);fill-opacity:1;" d="M 16.851562 11.394531 L 6.789062 11.394531 L 7.367188 10.054688 C 8.027344 8.53125 9.53125 7.542969 11.191406 7.542969 L 19.886719 7.542969 L 18.761719 10.140625 C 18.433594 10.902344 17.683594 11.394531 16.851562 11.394531 Z M 16.851562 11.394531 "/></g></svg>'
         ];
     }
 
@@ -99,20 +99,20 @@ class OrderStatusChangedTrigger extends BaseTrigger
             'from_status' => [
                 'type' => 'select',
                 'label' => __('From Order Status', 'fluent-crm'),
-                'help' => __('The current status that will trigger an action when it changes from this status to the \'To Order Status.\'', 'fluentcampaign-pro'),
+                'help' => __('The current status that will trigger an action when it changes from this status to the \'To Order Status.\'', 'fluent-crm'),
                 'options' => $formattedStatuses
             ],
             'to_status' => [
                 'type' => 'select',
                 'label' => __('To Order Status', 'fluent-crm'),
-                'help' => __('The target status that will trigger an action when the order moves from the \'From Order Status\' to this status.', 'fluentcampaign-pro'),
+                'help' => __('The target status that will trigger an action when the order moves from the \'From Order Status\' to this status.', 'fluent-crm'),
                 'options' => $formattedStatuses
             ],
             'run_multiple'  => [
                 'type'        => 'yes_no_check',
                 'label'       => '',
-                'check_label' => __('Restart the Automation Multiple times for a contact for this event. (Only enable if you want to restart automation for the same contact)', 'fluentcampaign-pro'),
-                'inline_help' => __('If you enable, then it will restart the automation for a contact if the contact already in the automation. Otherwise, It will just skip if already exist', 'fluentcampaign-pro')
+                'check_label' => __('Restart the Automation Multiple times for a contact for this event. (Only enable if you want to restart automation for the same contact)', 'fluent-crm'),
+                'inline_help' => __('If enabled, it will restart the automation for a contact if the contact is already in the automation. Otherwise, it will skip if it already exists', 'fluent-crm')
             ]
         ];
     }
@@ -129,7 +129,7 @@ class OrderStatusChangedTrigger extends BaseTrigger
 
         $orderId = Arr::get($order, 'id', 0);
 
-        $subscriberData = CartHelper::prepareSubsciberData($customer);
+        $subscriberData = CartHelper::prepareSubscriberData($customer);
 
 
         if (!is_email($subscriberData['email'])) {
@@ -171,14 +171,9 @@ class OrderStatusChangedTrigger extends BaseTrigger
 
         $selectedProductIds = Arr::get($conditions, 'product_ids', []);
 
-        // If no products are selected, return true
-        if (empty($selectedProductIds)) {
-            return true;
-        }
-
-        $productMatch = !empty($selectedProductIds) && !empty(array_intersect($selectedProductIds, $orderedProductIds));
-
-        if (!$productMatch) {
+        // Product filter is optional — only apply it when products are selected.
+        // Status filters and run_multiple checks below must still run either way.
+        if (!empty($selectedProductIds) && !array_intersect($selectedProductIds, $orderedProductIds)) {
             return false;
         }
 

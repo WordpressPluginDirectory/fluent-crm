@@ -207,16 +207,21 @@ class FunnelHelper
     public static function saveFunnelSequence($funnelId, $data)
     {
         $funnelSettings = \json_decode(Arr::get($data, 'funnel_settings'), true);
-
-        $funnelConditions = \json_decode(Arr::get($data, 'conditions', []), true);
+        $funnelConditions = \json_decode(Arr::get($data, 'conditions', '[]'), true);
 
         $funnel = Funnel::findOrFail($funnelId);
-        $funnel->settings = $funnelSettings;
+
+        if (is_array($funnelSettings)) {
+            $funnel->settings = $funnelSettings;
+        }
+
         if ($funnelTitle = Arr::get($data, 'funnel_title')) {
             $funnel->title = sanitize_text_field($funnelTitle);
         }
 
-        $funnel->conditions = $funnelConditions;
+        if (is_array($funnelConditions)) {
+            $funnel->conditions = $funnelConditions;
+        }
         $funnel->status = Arr::get($data, 'status');
         $funnel->save();
 
@@ -226,7 +231,11 @@ class FunnelHelper
             $funnel->deleteMeta('description');
         }
 
-        $sequences = \json_decode(Arr::get($data, 'sequences', []), true);
+        $sequences = \json_decode(Arr::get($data, 'sequences', '[]'), true) ?? [];
+
+        if (!is_array($sequences)) {
+            return $funnel;
+        }
 
         $sequenceIds = [];
         $cDelay = 0;
@@ -283,7 +292,32 @@ class FunnelHelper
                 do_action('fluentcrm_funnel_sequence_deleting_' . $deletingSequence->action_name, $deletingSequence, $funnel);
                 $deletingSequence->delete();
             }
+
+            // Unstick subscribers waiting on deleted benchmark sequences
+            FunnelSubscriber::where('funnel_id', $funnel->id)
+                ->where('status', 'waiting')
+                ->whereNotIn('next_sequence_id', $sequenceIds)
+                ->update([
+                    'status'              => 'active',
+                    'next_execution_time' => current_time('mysql')
+                ]);
         }
+
+        // Sync next_sequence integer after renumbering — active/waiting subscribers
+        // may have stale values from before the re-save
+        global $wpdb;
+        $subscribersTable = $wpdb->prefix . 'fc_funnel_subscribers';
+        $sequencesTable = $wpdb->prefix . 'fc_funnel_sequences';
+
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$subscribersTable} fs
+             JOIN {$sequencesTable} seq ON fs.next_sequence_id = seq.id
+             SET fs.next_sequence = seq.sequence
+             WHERE fs.funnel_id = %d
+               AND fs.status IN ('active', 'waiting')
+               AND (fs.next_sequence IS NULL OR fs.next_sequence != seq.sequence)",
+            $funnel->id
+        ));
 
         (new FunnelHandler())->resetFunnelIndexes();
 
@@ -341,7 +375,7 @@ class FunnelHelper
         return $delay;
     }
 
-    public static function getCurrentDelayInSeconds($settings, $sequence = null, $funnerSubId = null)
+    public static function getCurrentDelayInSeconds($settings, $sequence = null, $funnelSubId = null)
     {
         $waitType = Arr::get($settings, 'wait_type');
 
@@ -354,7 +388,7 @@ class FunnelHelper
             if ($waitTimes < 1) {
                 $waitTimes = 0;
             }
-            return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', $waitTimes, $settings, $sequence, $funnerSubId);
+            return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', $waitTimes, $settings, $sequence, $funnelSubId);
         }
 
         if ($waitType && $waitType == 'to_day') {
@@ -366,51 +400,53 @@ class FunnelHelper
             }, $nextDays);
 
             if (empty($nextDays)) { // if no day is selected
-                $nextDays = [date('D', $timeStampNow), date('D', strtotime('+1 day', $timeStampNow))];
+                $nextDays = [gmdate('D', $timeStampNow), gmdate('D', strtotime('+1 day', $timeStampNow))];
             }
 
             $nextTime = Arr::get($settings, 'to_day_time');
             if (!$nextTime) {
-                $nextTime = date('H:i', $timeStampNow);
+                $nextTime = gmdate('H:i', $timeStampNow);
             }
 
             $date = self::getEarliestDay($nextDays, $nextTime);
 
             $seconds = strtotime($date) - current_time('timestamp');
             $waitTimes = ($seconds < 1) ? 0 : $seconds;
-            return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', $waitTimes, $settings, $sequence, $funnerSubId);
+            return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', $waitTimes, $settings, $sequence, $funnelSubId);
         }
 
 
         if ($waitType == 'by_custom_field') {
-            if (!$funnerSubId) {
-                return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', 60, $settings, $sequence, $funnerSubId);
+            if (!$funnelSubId) {
+                return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', 60, $settings, $sequence, $funnelSubId);
             }
 
-            $funnelSub = FunnelSubscriber::where('id', $funnerSubId)->first();
+            $funnelSub = FunnelSubscriber::where('id', $funnelSubId)->first();
 
             if (!$funnelSub || !$funnelSub->subscriber) {
-                return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', 60, $settings, $sequence, $funnerSubId);
+                return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', 60, $settings, $sequence, $funnelSubId);
             }
 
             $customFieldKey = Arr::get($settings, 'by_custom_field', '');
 
             if (!$customFieldKey) {
-                return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', 60, $settings, $sequence, $funnerSubId);
+                return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', 60, $settings, $sequence, $funnelSubId);
             }
 
             $dateTime = null;
 
             if ($customFieldKey == '__date_of_birth__') {
                 $dateTime = $funnelSub->subscriber->date_of_birth;
-
+                if ($dateTime && !self::isValidYmd($dateTime)) {
+                    $dateTime = null;
+                }
                 if ($dateTime) {
                     // should be this current year's date
-                    $dateTime = date('Y') . '-' . date('m-d', strtotime($dateTime));
+                    $dateTime = gmdate('Y') . '-' . gmdate('m-d', strtotime($dateTime));
 
                     // if the date is passed, then next year
                     if (strtotime($dateTime) < current_time('timestamp')) {
-                        $dateTime = (date('Y') + 1) . '-' . date('m-d', strtotime($dateTime));
+                        $dateTime = (gmdate('Y') + 1) . '-' . gmdate('m-d', strtotime($dateTime));
                     }
                 }
             } else {
@@ -421,7 +457,7 @@ class FunnelHelper
             }
 
             if (!$dateTime) {
-                return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', 60, $settings, $sequence, $funnerSubId);
+                return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', 60, $settings, $sequence, $funnelSubId);
             }
 
             $timeStamp = strtotime($dateTime);
@@ -432,7 +468,7 @@ class FunnelHelper
                 $waitTimes = 60;
             }
 
-            return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', $waitTimes, $settings, $sequence, $funnerSubId);
+            return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', $waitTimes, $settings, $sequence, $funnelSubId);
         }
 
         $unit = Arr::get($settings, 'wait_time_unit');
@@ -450,7 +486,7 @@ class FunnelHelper
             $waitTimes = 1;
         }
 
-        return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', $waitTimes, $settings, $sequence, $funnerSubId);
+        return apply_filters('fluent_crm/funnel_seq_delay_in_seconds', $waitTimes, $settings, $sequence, $funnelSubId);
     }
 
     /*
@@ -466,11 +502,11 @@ class FunnelHelper
             $timeStampsArray[] = $timestamp + ($i * 86400);
         }
 
-        $earliest = date('Y-m-d ' . $time . ':s', $timestamp);
+        $earliest = gmdate('Y-m-d ' . $time . ':s', $timestamp);
 
         foreach ($timeStampsArray as $timeStampVal) {
-            if (in_array(date('D', $timeStampVal), $days)) {
-                $earliest = date('Y-m-d ' . $time . ':s', $timeStampVal);
+            if (in_array(gmdate('D', $timeStampVal), $days)) {
+                $earliest = gmdate('Y-m-d ' . $time . ':s', $timeStampVal);
                 if (strtotime($earliest) - $timestamp > -60) {
                     return $earliest;
                 }
@@ -478,6 +514,20 @@ class FunnelHelper
         }
 
         return $earliest;
+    }
+
+    /**
+     * Check if a string is a valid calendar date in Y-m-d format (avoids strtotime normalizing invalid dates).
+     *
+     * @param string $ymd Date string (e.g. 2024-02-31).
+     * @return bool
+     */
+    private static function isValidYmd($ymd)
+    {
+        if (!is_string($ymd) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $ymd, $parts)) {
+            return false;
+        }
+        return checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1]);
     }
 
     private static function saveChildSequences($sequence, $funnel)
@@ -534,54 +584,6 @@ class FunnelHelper
         }
 
         return $formattedSequences;
-    }
-
-    public static function extractSequences($sequences)
-    {
-        if ($sequences->isEmpty()) {
-            return [
-                'immediate_sequences' => [],
-                'next_sequence'       => false
-            ];
-        }
-
-        $immediateSequences = [];
-        $nextSequence = false;
-        $firstSequence = $sequences[0];
-        $requiredBenchMark = false;
-        $conditionalBlock = false;
-
-        foreach ($sequences as $sequence) {
-            if ($requiredBenchMark || $conditionalBlock) {
-                continue;
-            }
-
-            /*
-             * Check if there has a required sequence for this.
-             */
-            if ($sequence->type == 'benchmark') {
-                if ($sequence->settings['type'] == 'required') {
-                    $requiredBenchMark = $sequence;
-                }
-                continue;
-            }
-
-            if ($sequence->type == 'conditional') {
-                $conditionalBlock = $sequence;
-                continue;
-            }
-
-            if ($sequence->c_delay == $firstSequence->c_delay) {
-                $immediateSequences[] = $sequence;
-            } else {
-                if (!$nextSequence) {
-                    $nextSequence = $sequence;
-                }
-                if ($sequence->c_delay < $nextSequence->c_delay) {
-                    $nextSequence = $sequence;
-                }
-            }
-        }
     }
 
     public static function maybeMigrateConditions($funnelId)

@@ -9,11 +9,61 @@ use FluentCrm\App\Models\SystemLog;
 use FluentCrm\App\Models\Tag;
 use FluentCrm\App\Models\UrlStores;
 use FluentCrm\App\Models\Webhook;
+use FluentCrm\App\Services\BlockRender\BlockEditorHelper;
 use FluentCrm\Framework\Support\Arr;
 use FluentCrm\Framework\Support\Str;
 
 class Helper
 {
+    /**
+     * Determine if the active Easy Digital Downloads version is supported.
+     *
+     * FluentCRM's EDD integration is EDD 3+ only because the current
+     * integration depends on the EDD 3 order APIs and database tables.
+     *
+     * @return bool
+     */
+    public static function isEdd3()
+    {
+        return class_exists('\Easy_Digital_Downloads')
+            && defined('EDD_VERSION')
+            && version_compare(EDD_VERSION, '3.0', '>=');
+    }
+
+    /**
+     * Parse mixed input into an array.
+     *
+     * Accepts either a native array or a JSON string. For string inputs,
+     * it attempts decoding the raw payload first, then retries with
+     * `wp_unslash()` only when the string changes. Returns `$default` when
+     * decoding fails or when the decoded JSON is not an array.
+     *
+     * @param mixed $value Input value from request/body.
+     * @param array $default Fallback value when parsing fails.
+     * @return array
+     */
+    public static function parseArrayOrJson($value, $default = [])
+    {
+        if (!is_string($value)) {
+            return is_array($value) ? $value : $default;
+        }
+
+        $payloads = [$value];
+        $unslashed = wp_unslash($value);
+        if ($unslashed !== $value) {
+            $payloads[] = $unslashed;
+        }
+
+        foreach ($payloads as $payload) {
+            $decoded = json_decode($payload, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return $default;
+    }
+
     public static function getLinksFromString($string)
     {
         preg_match_all('/<a[^>]+(href\=["|\'](http.*?)["|\'])/m', $string, $urls);
@@ -41,6 +91,9 @@ class Helper
 
         foreach ($urls as $index => $url) {
             $urlSlug = UrlStores::getUrlSlug($url);
+            if (!$urlSlug) {
+                continue;
+            }
             $formatted[$replaces[$index]] = add_query_arg([
                 'ns_url' => $urlSlug
             ], $baseUrl);
@@ -59,7 +112,7 @@ class Helper
             }
 
             if ($hasSmartUrl && strpos($src, 'smart_url') !== false) {
-                $url .= '&signed_hash=' . rawurlencode(wp_hash_password($hash));
+                $url .= '&signed_hash=' . rawurlencode(self::signSmartUrlHash($hash));
             }
 
             $campaignUrls[$src] = 'href="' . $url . '"';
@@ -67,7 +120,63 @@ class Helper
         return str_replace(array_keys($campaignUrls), array_values($campaignUrls), $html);
     }
 
-    public static function generateEmailHash($insertId)
+    public static function attachAnonymousUrls($html, $campaignUrls, $insertId, $hash = false)
+    {
+        $hasSmartUrl = strpos($html, 'smart_url') !== false;
+        foreach ($campaignUrls as $src => $url) {
+            $url .= '&mid=' . $insertId . '&ano=1';
+            if ($hash) {
+                $url .= '&fch=' . substr($hash, 0, 8);
+            }
+
+            if ($hasSmartUrl && strpos($src, 'smart_url') !== false) {
+                $url .= '&signed_hash=' . rawurlencode(self::signSmartUrlHash($hash));
+            }
+
+            $campaignUrls[$src] = 'href="' . $url . '"';
+        }
+
+        return str_replace(array_keys($campaignUrls), array_values($campaignUrls), $html);
+    }
+
+    /**
+     * Generate an HMAC signature for smart URL verification.
+     *
+     * Uses a dedicated persistent key (not wp_salt) so that WordPress
+     * salt rotation does not invalidate previously sent email links.
+     *
+     * @param string $hash The email hash to sign.
+     * @return string
+     */
+    public static function signSmartUrlHash($hash)
+    {
+        return hash_hmac('sha256', $hash, wp_salt('auth'));
+    }
+
+    /**
+     * Verify a smart URL signed hash.
+     *
+     * Supports both the new HMAC signatures and legacy bcrypt hashes
+     * for backward compatibility with emails sent before the migration.
+     *
+     * @param string $emailHash The campaign email hash.
+     * @param string $signedHash The signed hash from the URL.
+     * @return bool
+     */
+    public static function verifySmartUrlHash($emailHash, $signedHash)
+    {
+        // New HMAC verification (fast, constant-time)
+        $expected = self::signSmartUrlHash($emailHash);
+        if (hash_equals($expected, $signedHash)) {
+            return true;
+        }
+
+        // Backward compatibility: verify legacy bcrypt hashes
+        // for emails sent before the HMAC migration
+        return wp_check_password($emailHash, $signedHash);
+    }
+
+    public static function generateEmailHash($insertId = null)
     {
         return wp_generate_uuid4();
     }
@@ -78,32 +187,35 @@ class Helper
             return $emailBody;
         }
 
-        /**
-         * Filter to disable email open tracking in FluentCRM.
-         *
-         * This filter allows you to disable the email open tracking feature in FluentCRM.
-         *
-         * @param bool Whether to disable email open tracking. Default false.
-         * @since 2.0.0
-         *
-         */
-        if (apply_filters('fluentcrm_disable_email_open_tracking', false)) {
+        $trackingType = fluentcrmTrackEmailOpen();
+
+        if (!$trackingType) {
             return $emailBody;
         }
 
-        $trackImageUrl = add_query_arg([
+        $args = [
             'fluentcrm' => 1,
             'route'     => 'open',
             '_e_hash'   => $hash,
             '_e_id'     => $emailId
-        ], self::getSiteUrl());
-        $trackPixelHtml = '<img src="' . esc_url($trackImageUrl) . '" alt="" />';
+        ];
+
+        if ($trackingType === 'anonymous') {
+            $args['ano'] = 1;
+        }
+
+        $trackImageUrl = add_query_arg($args, self::getSiteUrl());
+        $trackPixelHtml = '<img src="' . esc_url($trackImageUrl) . '" alt="" width="1" height="1" border="0" style="display:block;width:1px;height:1px;border:0;outline:none;" />';
 
         if (strpos($emailBody, '{fluent_track_pixel}') !== false) {
             $emailBody = str_replace('{fluent_track_pixel}', $trackPixelHtml, $emailBody);
+        } elseif (stripos($emailBody, '</body>') !== false) {
+            // Case-insensitive replace before the first closing body tag.
+            $emailBody = preg_replace('#</body>#i', $trackPixelHtml . '$0', $emailBody, 1);
         } else {
-            // we have to inject this
-            $emailBody = str_replace('</body>', $trackPixelHtml . '</body>', $emailBody);
+            // No body wrapper (e.g. raw_html templates with HTML fragments) —
+            // append so the pixel is never silently dropped.
+            $emailBody .= $trackPixelHtml;
         }
 
         return $emailBody;
@@ -124,10 +236,18 @@ class Helper
             ],
         ];
 
+        if (apply_filters('fluent_crm/sms_moudle_enabled', false)) {
+            $sections['subscriber_sms'] = [
+                'name'    => 'subscriber_sms',
+                'title'   => __('SMS', 'fluent-crm'),
+                'handler' => 'route'
+            ];
+        }
+
         if (self::getPurchaseHistoryProviders()) {
             $sections['subscriber_purchases'] = [
                 'name'    => 'subscriber_purchases',
-                'title'   => __('Purchase History', 'fluent-crm'),
+                'title'   => __('Purchases', 'fluent-crm'),
                 'handler' => 'route'
             ];
         }
@@ -135,7 +255,7 @@ class Helper
         if (defined('FLUENTFORM')) {
             $sections['subscriber_form_submissions'] = [
                 'name'    => 'subscriber_form_submissions',
-                'title'   => __('Form Submissions', 'fluent-crm'),
+                'title'   => __('Forms', 'fluent-crm'),
                 'handler' => 'route'
             ];
         }
@@ -153,14 +273,14 @@ class Helper
         if ($supportProviders) {
             $sections['subscriber_support_tickets'] = [
                 'name'    => 'subscriber_support_tickets',
-                'title'   => __('Support Tickets', 'fluent-crm'),
+                'title'   => __('Tickets', 'fluent-crm'),
                 'handler' => 'route'
             ];
         }
 
         $sections['subscriber_notes'] = [
             'name'    => 'subscriber_notes',
-            'title'   => __('Notes & Activities', 'fluent-crm'),
+            'title'   => __('Notes', 'fluent-crm'),
             'handler' => 'route'
         ];
 
@@ -371,27 +491,8 @@ class Helper
 
     public static function getEmailDesignTemplates()
     {
-        $defaultDesignConfig = [
-            'content_width'         => 700,
-            'content_padding'       => 20,
-            'headings_font_family'  => "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'",
-            'text_color'            => '#202020',
-            'link_color'            => '',
-            'body_bg_color'         => '#FAFAFA',
-            'content_bg_color'      => '#FFFFFF',
-            'footer_text_color'     => '#202020',
-            'content_font_family'   => "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'",
-            'paragraph_color'       => '',
-            'paragraph_font_size'   => '',
-            'paragraph_font_family' => '',
-            'paragraph_line_height' => '',
-            'headings_color'        => '#202020'
-        ];
+        $defaultDesignConfig = BlockEditorHelper::getDefaultPrefConfig();
 
-
-        $classicConfig = [
-            'content_font_family' => "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'",
-        ];
 
         if (defined('FLUENTCAMPAIGN')) {
             $defaultDesignConfig['disable_footer'] = 'no';
@@ -400,6 +501,15 @@ class Helper
 
         $plainConfig = $defaultDesignConfig;
         $plainConfig['body_bg_color'] = '#FFFFFF';
+
+        $classicConfig = $plainConfig;
+
+        $plainConfig['design_template'] = 'plain';
+        $classicConfig['design_template'] = 'classic';
+
+        $emptyConfig = [
+            'content_font_family' => "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'",
+        ];
 
         /**
          * Filter the email design templates available in FluentCRM.
@@ -454,29 +564,29 @@ class Helper
             'simple'      => [
                 'id'            => 'simple',
                 'label'         => __('Simple Boxed', 'fluent-crm'),
-                'image'         => fluentCrmMix('images/simple.png'),
+                'image'         => fluentCrmMix('images/gutenberg-builder.svg'),
                 'config'        => $defaultDesignConfig,
                 'use_gutenberg' => true
             ],
             'plain'       => [
                 'id'            => 'plain',
                 'label'         => __('Plain Centered', 'fluent-crm'),
-                'image'         => fluentCrmMix('images/plain-centered.png'),
+                'image'         => fluentCrmMix('images/plain_centered.svg'),
                 'config'        => $plainConfig,
                 'use_gutenberg' => true
             ],
             'classic'     => [
                 'id'            => 'classic',
                 'label'         => __('Plain Left', 'fluent-crm'),
-                'image'         => fluentCrmMix('images/classic.png'),
-                'config'        => $plainConfig,
+                'image'         => fluentCrmMix('images/plain_left.svg'),
+                'config'        => $classicConfig,
                 'use_gutenberg' => true
             ],
             'raw_classic' => [
                 'id'            => 'raw_classic',
                 'label'         => __('Classic Editor', 'fluent-crm'),
-                'image'         => fluentCrmMix('images/classic_raw.png'),
-                'config'        => $classicConfig,
+                'image'         => fluentCrmMix('images/classic-editor.svg'),
+                'config'        => $emptyConfig,
                 'use_gutenberg' => false,
                 'template_type' => 'classic_editor',
                 'template_info' => '<h3>Classic Text Based Email</h3><p>Type your simple email and FluentCRM will send that without altering any design processing. The default footer will be injected after your content if footer is not disabled.</p>'
@@ -484,7 +594,7 @@ class Helper
             'raw_html'    => [
                 'id'            => 'raw_html',
                 'label'         => __('Raw HTML', 'fluent-crm'),
-                'image'         => fluentCrmMix('images/raw-html.png'),
+                'image'         => fluentCrmMix('images/html-editor.svg'),
                 'config'        => [],
                 'use_gutenberg' => false,
                 'template_type' => 'raw_text_box',
@@ -496,8 +606,8 @@ class Helper
             $templates['visual_builder'] = [
                 'id'            => 'visual_builder',
                 'label'         => __('Visual Builder', 'fluent-crm'),
-                'image'         => fluentCrmMix('images/drag-drop.png'),
-                'config'        => $classicConfig,
+                'image'         => fluentCrmMix('images/visual-builder.svg'),
+                'config'        => $emptyConfig,
                 'use_gutenberg' => false,
                 'template_type' => 'visual_builder_demo'
             ];
@@ -511,7 +621,12 @@ class Helper
         if (!$templateName) {
             $templateName = self::getDefaultEmailTemplate();
         }
-        $config = Arr::get(self::getEmailDesignTemplates(), $templateName . '.config', []);
+        $templates = self::getEmailDesignTemplates();
+        if (!isset($templates[$templateName])) {
+            $templateName = 'simple';
+        }
+
+        $config = Arr::get($templates, $templateName . '.config', []);
 
         if ($withGlobal) {
             $globalSettings = fluentcrm_get_option('global_email_style_config', []);
@@ -526,6 +641,7 @@ class Helper
     {
         return [
             'fluentcampaign'       => defined('FLUENTCAMPAIGN_FRAMEWORK_VERSION'),
+            'frontend_portal'      => defined('FLUENTCAMPAIGN_FRAMEWORK_VERSION') && self::isExperimentalEnabled('frontend_portal'),
             'company_module'       => self::isCompanyEnabled(),
             'event_tracking'       => self::isExperimentalEnabled('event_tracking'),
             /**
@@ -600,6 +716,20 @@ class Helper
     {
         $defaultFooter = '{{crm.business_name}}, {{crm.business_address}}<br>Don\'t like these emails? <a href="##crm.unsubscribe_url##">Unsubscribe</a> or <a href="##crm.manage_subscription_url##">Manage Email Subscriptions</a>';
 
+        $defaults = [
+            'from_name'         => '',
+            'from_email'        => '',
+            'emails_per_second' => 15,
+            'email_footer'      => $defaultFooter,
+            'pref_list_type'    => 'no',
+            'pref_list_items'   => [],
+            'pref_form'         => 'no',
+            'pref_general'      => ['first_name', 'last_name'],
+            'pref_custom'       => [],
+            'show_on_page'      => 'no',
+            'pref_page_id'      => ''
+        ];
+
         if ($settings = fluentcrmGetGlobalSettings('email_settings', [])) {
             if (empty($settings['email_footer'])) {
                 $settings['email_footer'] = $defaultFooter;
@@ -607,7 +737,7 @@ class Helper
 
             if (empty($settings['pref_form'])) {
                 $settings['pref_form'] = 'no';
-                $settings['pref_general'] = ['prefix', 'first_name', 'last_name'];
+                $settings['pref_general'] = ['first_name', 'last_name'];
                 $settings['pref_custom'] = [];
             }
 
@@ -619,27 +749,17 @@ class Helper
                 $settings['pref_custom'] = [];
             }
 
-            return $settings;
+            return wp_parse_args($settings, $defaults);
         }
 
-        return [
-            'from_name'         => '',
-            'from_email'        => '',
-            'emails_per_second' => 15,
-            'email_footer'      => $defaultFooter,
-            'pref_list_type'    => 'no',
-            'pref_list_items'   => [],
-            'pref_form'         => 'no',
-            'pref_general'      => ['prefix', 'first_name', 'last_name'],
-            'pref_custom'       => []
-        ];
+        return $defaults;
     }
 
     public static function getPurchaseHistoryProviders()
     {
         $validProviders = [];
 
-        if(defined('FLUENTCART_VERSION')) {
+        if (defined('FLUENTCART_VERSION')) {
             $validProviders['fluent_cart'] = [
                 'title' => __('FluentCart Purchase History', 'fluent-crm'),
                 'name'  => __('FluentCart', 'fluent-crm')
@@ -653,7 +773,7 @@ class Helper
             ];
         }
 
-        if (class_exists('\Easy_Digital_Downloads')) {
+        if (self::isEdd3()) {
             $validProviders['edd'] = [
                 'title' => __('EDD Purchase History', 'fluent-crm'),
                 'name'  => __('Easy Digital Downloads', 'fluent-crm')
@@ -1068,8 +1188,10 @@ class Helper
         if ($isRefunded) {
             if ($data[$currency] > $amount) {
                 $data[$currency] -= $amount;
-                if (in_array($orderId, $data['orderIds'])) {
-                    unset($data['orderIds'][$orderId]);
+                $key = array_search($orderId, $data['orderIds']);
+                if ($key !== false) {
+                    unset($data['orderIds'][$key]);
+                    $data['orderIds'] = array_values($data['orderIds']);
                 }
             }
         } else {
@@ -1202,14 +1324,6 @@ class Helper
 
     public static function hasComplianceText($text)
     {
-        /*
-         * @deprecated fluencrm_disable_check_compliance_string since 2.8.33
-         * please use fluent_crm/disable_check_compliance_string instead
-         * this snippet checks if the email has any compliance text
-         * the filter can be used to disable the check such as if filter returns true then it will not check the compliance text
-         */
-
-        $result = apply_filters_deprecated('fluencrm_disable_check_compliance_string', [false, $text], '2.8.33', 'fluent_crm/disable_check_compliance_string');
         /**
          * Filters the compliance check string result.
          *
@@ -1220,27 +1334,13 @@ class Helper
          * @since 2.8.33
          *
          */
-        $result = apply_filters('fluent_crm/disable_check_compliance_string', $result, $text);
+        $result = apply_filters('fluent_crm/disable_check_compliance_string', false, $text);
 
         if ($result) {
             return true; // directly return true if the filter returns true, would be better if we could return the $result of the filter
         }
 
-        $lookUpTexts = [
-            '##crm.manage_subscription_url##',
-            '##crm.unsubscribe_url##',
-            '{{crm.unsubscribe_html',
-            '{{crm.manage_subscription_html',
-            '{{crm_global_email_footer}}'
-        ];
-
-        foreach ($lookUpTexts as $lookUpText) {
-            if (strpos($text, $lookUpText) !== false) {
-                return true;
-            }
-        }
-
-        return false;
+        return (bool)preg_match('/##crm\.manage_subscription_url##|##crm\.unsubscribe_url##|\{\{crm\.unsubscribe_html|\{\{crm\.manage_subscription_html|\{\{crm_global_email_footer\}\}/', $text);
     }
 
     public static function maybeDisableEmojiOnEmail()
@@ -1385,11 +1485,6 @@ class Helper
                         'value' => 'created_at',
                         'type'  => 'dates',
                     ],
-                    [
-                        'label' => __('Date of Birth', 'fluent-crm'),
-                        'value' => 'date_of_birth',
-                        'type'  => 'dates',
-                    ],
 
                 ],
             ],
@@ -1439,7 +1534,7 @@ class Helper
                         'option_key'        => 'user_roles_options',
                         'is_multiple'       => false,
                         'is_singular_value' => true,
-                        'help'              => 'Filter by user role, please make sure your users are synced with your FluentCRM contacts'
+                        'help'              => __('Filter by user role, please make sure your users are synced with your FluentCRM contacts', 'fluent-crm')
                     ],
                 ],
             ],
@@ -1456,7 +1551,7 @@ class Helper
                         'label' => __('Last Email Open', 'fluent-crm'),
                         'value' => 'email_opened',
                         'type'  => 'dates',
-                        'help'  => 'Please note that, some email clients send false-positive for email open pixel tracking so it may not 100% correct.'
+                        'help'  => __('Please note that, some email clients send false-positive for email open pixel tracking so it may not 100% correct.', 'fluent-crm')
                     ],
                     [
                         'label' => __('Last Email Clicked', 'fluent-crm'),
@@ -1479,7 +1574,7 @@ class Helper
                             'not_in'      => 'not in (regardless of status)'
                         ],
                         'experimental_cache' => true,
-                        'help'               => 'This will get only the contacts who got email in the selected campaign and then filter by email open/link clicked or not. <br />Please note that, some email clients send false-positive for email open pixel tracking so it may not 100% correct.'
+                        'help'               => __('This will get only the contacts who got email in the selected campaign and then filter by email open/link clicked or not. <br />Please note that, some email clients send false-positive for email open pixel tracking so it may not 100% correct.', 'fluent-crm')
                     ],
                     [
                         'label'              => __('Automation Activity -', 'fluent-crm'),
@@ -1497,7 +1592,7 @@ class Helper
                             'not_in'    => 'not in (regardless of status)'
                         ],
                         'experimental_cache' => true,
-                        'help'               => 'You can filter your contacts based on activity in a specific automation funnel.'
+                        'help'               => __('You can filter your contacts based on activity in a specific automation funnel.', 'fluent-crm')
                     ],
                     [
                         'label'              => __('Email Sequence Activity -', 'fluent-crm'),
@@ -1514,7 +1609,7 @@ class Helper
                             'not_in'    => 'not in (regardless of status)'
                         ],
                         'experimental_cache' => true,
-                        'help'               => 'You can filter your contacts based on activity in a specific email sequences.'
+                        'help'               => __('You can filter your contacts based on activity in a specific email sequences.', 'fluent-crm')
                     ]
                 ]
             ]
@@ -1568,12 +1663,12 @@ class Helper
                 } else if ($item['type'] == 'date') {
                     $item['type'] = 'dates';
                     $item['date_type'] = 'date';
-                    $item['value_format'] = 'yyyy-MM-dd';
+                    $item['value_format'] = 'YYYY-MM-DD';
                 } else if ($item['type'] == 'date_time') {
                     $item['type'] = 'dates';
                     $item['has_time'] = 'yes';
                     $item['date_type'] = 'datetime';
-                    $item['value_format'] = 'yyyy-MM-dd HH:mm:ss';
+                    $item['value_format'] = 'YYYY-MM-DD HH:mm:ss';
                 } else if (isset($field['options'])) {
                     $item['type'] = 'selections';
                     $options = $field['options'];
@@ -1644,11 +1739,11 @@ class Helper
                         ],
                         [
                             'value'             => 'commerce_exist',
-                            'label'             => 'Is a customer? (Pro Required)',
+                            'label'             => __('Is a customer? (Pro Required)', 'fluent-crm'),
                             'type'              => 'selections',
                             'is_multiple'       => false,
                             'disable_values'    => true,
-                            'value_description' => 'This filter will check if a contact has at least one shop order or not',
+                            'value_description' => __('This filter will check if a contact has at least one shop order or not', 'fluent-crm'),
                             'custom_operators'  => [
                                 'exist'     => 'Yes',
                                 'not_exist' => 'No',
@@ -1659,7 +1754,7 @@ class Helper
                 ];
             }
 
-            if (class_exists('\Easy_Digital_Downloads')) {
+            if (self::isEdd3()) {
                 $groups['edd'] = [
                     'label'    => __('EDD', 'fluent-crm'),
                     'value'    => 'edd',
@@ -1901,8 +1996,10 @@ class Helper
             'delete_contact_on_user' => 'no',
             'personal_data_export'   => 'yes',
             'one_click_unsubscribe'  => 'no',
-            'enable_gravatar'        => 'no',
-            'gravatar_fallback'      => 'no',
+            'enable_gravatar'        => 'yes',
+            'gravatar_fallback'      => 'yes',
+            'email_click_tracking'   => 'yes', // 'no'|'yes'|'anonymous'
+            'email_open_tracking'    => 'yes', // 'no'|'yes'|'anonymous'
         ];
 
         $settings = get_option('_fluentcrm_compliance_settings', []);
@@ -1929,23 +2026,26 @@ class Helper
         }
 
         $defaults = [
-            'quick_contact_navigation' => 'yes',
-            'campaign_archive'         => 'no',
-            'campaign_group_by_month'  => 'no',
-            'campaign_search'          => '',
-            'campaign_max_number'      => 50,
-            'campaign_ids'             => [],
-            'campaign_status'          => 'archived',
-            'classic_date_time'        => 'no',
-            'full_navigation'          => 'no',
-            'company_module'           => 'no',
-            'company_auto_logo'        => 'no',
-            'disable_visual_ai'        => 'no',
-            'multi_threading_emails'   => 'no',
-            'system_logs'              => 'no',
-            'event_tracking'           => 'no',
-            'abandoned_cart'           => 'no',
-            'activity_log'             => 'no'
+            'campaign_archive'        => 'no',
+            'campaign_group_by_month' => 'no',
+            'campaign_search'         => '',
+            'campaign_max_number'     => 50,
+            'campaign_ids'            => [],
+            'campaign_status'         => 'archived',
+            'frontend_portal'         => 'no',
+            'frontend_portal_slug'    => 'fluentcrm',
+            'frontend_portal_render_type' => 'standalone',
+            'frontend_portal_page_id' => '',
+            'classic_date_time'       => 'no',
+            'company_module'          => 'no',
+            'company_auto_logo'       => 'no',
+            'disable_visual_ai'       => 'no',
+            'multi_threading_emails'  => 'no',
+            'system_logs'             => 'no',
+            'event_tracking'          => 'no',
+            'abandoned_cart'          => 'no',
+            'activity_log'            => 'no',
+            'sms_module'              => 'no',
         ];
 
         $settings = get_option('_fluentcrm_experimental_settings', []);
@@ -1974,6 +2074,7 @@ class Helper
     public static function getUpcomingEmailCount()
     {
         global $wpdb;
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         return $wpdb->get_var("SELECT count(*) as aggregate FROM `{$wpdb->prefix}fc_campaign_emails` WHERE `status` IN ('pending', 'scheduled') AND `scheduled_at` <= '" . current_time('mysql') . "'");
     }
 
@@ -2049,7 +2150,7 @@ class Helper
 
     public static function hasConditionOnString($string)
     {
-        return strpos($string, 'conditional-group') || strpos($string, 'fc-cond-blocks') || strpos($string, 'fc_vis_cond');
+        return (bool)preg_match('/conditional-group|fcrmConditionType|conditional-content|fc-cond-blocks|fc_vis_cond/', $string);
     }
 
     public static function getEmailFooterContent($campaign = null)
@@ -2069,6 +2170,69 @@ class Helper
         }
 
         return Arr::get(self::getGlobalEmailSettings(), 'email_footer', '');
+    }
+
+    public static function getFooterConfig($campaign = null)
+    {
+
+        $defaults = [
+            'disable_footer' => 'no',
+            'custom_footer'  => 'no',
+            'footer_content' => '',
+            'font_size'      => 13,
+            'font_color'     => '#202020',
+            'background_color' => 'transparent',
+            'footer_padding' => 20
+        ];
+
+        if ($campaign && isset($campaign->settings)) {
+            if (Arr::get($campaign->settings, 'is_transactional') == 'yes') {
+                return [];
+            }
+            $footerSettings = Arr::get($campaign->settings, 'footer_settings', []);
+            $disableFooter = Arr::get($footerSettings, 'disable_footer');
+            if ($disableFooter !== 'yes' && $disableFooter !== 'no') {
+                $disableFooter = Arr::get($campaign->settings, 'template_config.disable_footer');
+            }
+
+            if ($disableFooter == 'yes') {
+                $defaults['disable_footer'] = 'yes';
+                $defaults['footer_content'] = '';
+                return $defaults;
+            }
+            if (!empty($footerSettings['font_size'])) {
+                $defaults['font_size'] = $footerSettings['font_size'];
+            }
+
+            if (!empty($footerSettings['font_color'])) {
+                $defaults['font_color'] = $footerSettings['font_color'];
+            }
+
+            if (!empty($footerSettings['background_color'])) {
+                $defaults['background_color'] = $footerSettings['background_color'];
+            }
+
+            $footerPadding = Arr::get($footerSettings, 'footer_padding');
+            if ($footerPadding !== null && $footerPadding !== '') {
+                $defaults['footer_padding'] = min(80, max(0, intval($footerPadding)));
+            } else {
+                $defaults['footer_padding'] = 20;
+            }
+
+            $customFooter = Arr::get($campaign->settings, 'footer_settings.custom_footer');
+            $emailFooter = Arr::get($campaign->settings, 'footer_settings.footer_content');
+
+            if ($customFooter === 'yes' && $emailFooter) {
+                $defaults['footer_content'] = $emailFooter;
+                return $defaults;
+            }
+        }
+
+        $globalContent = Arr::get(self::getGlobalEmailSettings(), 'email_footer', '');
+
+        $defaults['footer_content'] = $globalContent;
+
+        return $defaults;
     }
 
     public static function isCompanyEnabled()
@@ -2329,7 +2493,7 @@ class Helper
                 'name'         => 'created_at',
                 'label'        => __('Date Time', 'fluent-crm'),
                 'id'           => 'fc_note_title',
-                'value_format' => 'yyyy-MM-dd HH:mm:ss',
+                'value_format' => 'YYYY-MM-DD HH:mm:ss',
                 'help'         => __('keep blank for current time', 'fluent-crm')
             ),
             'title'       => array(
@@ -2528,7 +2692,8 @@ class Helper
         return $tagIds;
     }
 
-    private static function createList($listTitle) {
+    private static function createList($listTitle)
+    {
         $baseSlug = Str::slug($listTitle);
         $slug = $baseSlug;
         $counter = 1;
@@ -2542,12 +2707,13 @@ class Helper
         return Lists::create(
             [
                 'title' => $listTitle,
-                'slug' => $slug
+                'slug'  => $slug
             ]
         );
     }
 
-    private static function createTag($tagTitle) {
+    private static function createTag($tagTitle)
+    {
         $baseSlug = Str::slug($tagTitle);
         $slug = $baseSlug;
         $counter = 1;
@@ -2561,7 +2727,7 @@ class Helper
         return Tag::create(
             [
                 'title' => $tagTitle,
-                'slug' => $slug
+                'slug'  => $slug
             ]
         );
     }
@@ -2576,7 +2742,7 @@ class Helper
     public static function slugify($text, $fallback = '')
     {
         // Normalize input: cast to string and trim whitespace
-        $text = trim((string) $text);
+        $text = trim((string)$text);
 
         // Handle empty input
         if (empty($text)) {
@@ -2608,4 +2774,65 @@ class Helper
     {
         return sprintf('%s-%s', substr(uniqid(), -5), wp_generate_password(5, false, false));
     }
+
+    public static function getStatusText($text)
+    {
+        if (!$text) {
+            return '';
+        }
+
+        $mapStatus = [
+            'subscribed'     => __('Subscribed', 'fluent-crm'),
+            'pending'        => __('Pending', 'fluent-crm'),
+            'unsubscribed'   => __('Unsubscribed', 'fluent-crm'),
+            'transactional'  => __('Transactional', 'fluent-crm'),
+            'bounced'        => __('Bounced', 'fluent-crm'),
+            'complained'     => __('Complained', 'fluent-crm'),
+            'spammed'        => __('Spammed', 'fluent-crm'),
+            'checkout-draft' => __('Checkout Draft', 'fluent-crm'),
+            'completed'      => __('Completed', 'fluent-crm'),
+            'complete'       => __('Complete', 'fluent-crm'),
+            'on-draft'       => __('On Draft', 'fluent-crm'),
+            'cancelled'      => __('Cancelled', 'fluent-crm'),
+            'processing'     => __('Processing', 'fluent-crm'),
+            'paid'           => __('Paid', 'fluent-crm'),
+            'success'        => __('Success', 'fluent-crm')
+        ];
+
+        $mapStatus = apply_filters('fluent_crm/status_text', $mapStatus);
+
+        return isset($mapStatus[$text]) ? $mapStatus[$text] : ucfirst($text);
+    }
+
+    public static function wasProcessedByKeyId($emailLogId)
+    {
+        static $sentIds = [];
+
+        if (isset($sentIds[$emailLogId])) {
+            return true;
+        }
+
+        $sentIds[$emailLogId] = true;
+
+        return false;
+    }
+
+    public static function setInstantOption($optionKey, $value, $expire = 300)
+    {
+        if (wp_using_ext_object_cache()) {
+            return wp_cache_set($optionKey, $value, 'fc_instant_options', $expire);
+        }
+
+        return update_option($optionKey, $value, false);
+    }
+
+    public static function getInstantOption($optionKey)
+    {
+        if (wp_using_ext_object_cache()) {
+            return wp_cache_get($optionKey, 'fc_instant_options');
+        }
+
+        return get_option($optionKey);
+    }
+
 }

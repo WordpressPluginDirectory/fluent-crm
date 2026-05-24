@@ -23,6 +23,12 @@ class Mailer
 
         if (self::willIncludeName()) {
             if ($name = Arr::get($data, 'to.name')) {
+                $name = sanitize_text_field($name);
+                // If the name contains a comma, we need to wrap it in double quotes to prevent issues with email clients
+                if (strpos($name, ',') !== false) {
+                    $name = '"' . str_replace('"', '\"', $name) . '"';
+                }
+
                 $to = $name . ' <' . $to . '>';
             }
         }
@@ -37,7 +43,16 @@ class Mailer
 
     protected static function buildHeaders($data, $subscriber = null, $emailModel = null)
     {
-        $headers[] = "Content-Type: text/html; charset=UTF-8";
+        $data = apply_filters('fluent_crm/email_data_before_headers', $data, $subscriber, $emailModel);
+
+        $headers = [];
+
+        $contentType = Arr::get($data, 'headers.Content-Type');
+        if ($contentType) {
+            $headers[] = "Content-Type: {$contentType}";
+        } else {
+            $headers[] = "Content-Type: text/html; charset=UTF-8";
+        }
 
         $from = Arr::get($data, 'headers.From');
         $replyTo = Arr::get($data, 'headers.Reply-To');
@@ -54,7 +69,6 @@ class Mailer
         if ($subscriber && apply_filters('fluent_crm/enable_unsub_header', true, $data, $subscriber, $emailModel)) {
             $campaign = ($emailModel && $emailModel->campaign) ? $emailModel->campaign : null;
             $isTransactional = $campaign && Arr::get($campaign->settings, 'is_transactional') == 'yes';
-
             if (!$isTransactional) {
                 $args = [
                     'fluentcrm'   => 1,

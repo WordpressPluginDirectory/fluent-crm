@@ -16,6 +16,7 @@ use FluentCrm\App\Services\Libs\Mailer\Mailer;
 use FluentCrm\App\Services\Libs\Parser\Parser;
 use FluentCrm\App\Services\Sanitize;
 use FluentCrm\Framework\Support\Arr;
+use FluentCrm\Framework\Support\Str;
 
 
 /**
@@ -84,7 +85,7 @@ class ExternalPages
         $sesBounceKey = fluentcrm_get_option('_fc_bounce_key');
         $verifyKey = Arr::get($_REQUEST, 'verify_key');
 
-        if ($verifyKey != $sesBounceKey) {
+        if (!$sesBounceKey || $verifyKey !== $sesBounceKey) {
             wp_send_json([
                 'status'  => 422,
                 'message' => __('verify_key verification failed', 'fluent-crm')
@@ -93,15 +94,21 @@ class ExternalPages
 
         $postdata = \file_get_contents('php://input');
 
-        if (is_wp_error($postdata)) {
-            \error_log('SNS ERROR: ' . $postdata->get_error_message());
+        if (!$postdata) {
             wp_send_json([
                 'status'  => 423,
-                'message' => __('failed', 'fluent-crm')
+                'message' => __('Empty request body', 'fluent-crm')
             ], 422);
         }
 
         $postdata = \json_decode($postdata, true);
+
+        if (!$postdata || !is_array($postdata)) {
+            wp_send_json([
+                'status'  => 423,
+                'message' => __('Invalid JSON payload', 'fluent-crm')
+            ], 422);
+        }
 
         $notificationType = Arr::get($postdata, 'notificationType');
 
@@ -110,14 +117,19 @@ class ExternalPages
         }
 
         if ($notificationType == 'SubscriptionConfirmation') {
-            \wp_remote_get($postdata['SubscribeURL']);
+            $subscribeUrl = esc_url_raw($postdata['SubscribeURL'] ?? '');
+            // Only confirm subscriptions from AWS SNS domains to prevent SSRF
+            $host = wp_parse_url($subscribeUrl, PHP_URL_HOST);
+            if ($host && preg_match('/\.amazonaws\.com(\.cn)?$/i', $host)) {
+                \wp_remote_get($subscribeUrl);
+            }
             wp_send_json([
                 'status'  => 200,
                 'message' => __('success', 'fluent-crm')
             ], 200);
         }
 
-
+        // SNS wraps SES notifications in a Message envelope
         if (empty($postdata['notificationType']) && !empty($postdata['Message'])) {
             $postdata = json_decode($postdata['Message'], true);
             $notificationType = Arr::get($postdata, 'notificationType', $notificationType);
@@ -125,44 +137,65 @@ class ExternalPages
 
         if ($notificationType == 'Bounce') {
             $bounce = Arr::get($postdata, 'bounce', []);
+            $bouncedRecipients = Arr::get($bounce, 'bouncedRecipients', []);
+
+            if (!$bouncedRecipients) {
+                wp_send_json(['status' => 200, 'message' => __('No recipients', 'fluent-crm')], 200);
+            }
 
             $bounceType = Arr::get($bounce, 'bounceType');
-            if ($bounceType == 'Undetermined' || $bounceType == 'Permanent') {
+            $bounceSubType = Arr::get($bounce, 'bounceSubType');
+            $isHardBounce = $bounceType === 'Permanent';
+            // Sender-side failures — the recipient's mailbox is fine, so we must
+            // not penalise the subscriber. See SES bounce sub-type reference.
+            $senderFaultSubTypes = ['MessageTooLarge', 'ContentRejected', 'AttachmentRejected'];
+            $isSenderFault = !$isHardBounce && in_array($bounceSubType, $senderFaultSubTypes, true);
 
-                foreach ($bounce['bouncedRecipients'] as $bouncedRecipient) {
-                    $data = [
-                        'email'  => $this->extractEmail($bouncedRecipient['emailAddress']),
-                        'reason' => Arr::get($bouncedRecipient, 'diagnosticCode'),
-                        'status' => 'bounced'
-                    ];
-
-                    $this->recordUnsubscribe($data);
+            foreach ($bouncedRecipients as $bouncedRecipient) {
+                $email = $this->extractEmail(Arr::get($bouncedRecipient, 'emailAddress', ''));
+                if (!$email) {
+                    continue;
                 }
-            } else {
-                foreach ($bounce['bouncedRecipients'] as $bouncedRecipient) {
-                    $data = [
-                        'email'  => $this->extractEmail($bouncedRecipient['emailAddress']),
-                        'reason' => Arr::get($bouncedRecipient, 'diagnosticCode')
-                    ];
 
-                    $this->recordSoftBounce($data);
+                $reason = Arr::get($bouncedRecipient, 'diagnosticCode', '');
+
+                if ($isHardBounce) {
+                    $this->recordUnsubscribe([
+                        'email'  => $email,
+                        'reason' => $reason,
+                        'status' => 'bounced'
+                    ]);
+                } else if (!$isSenderFault) {
+                    $this->recordSoftBounce([
+                        'email'  => $email,
+                        'reason' => $reason
+                    ]);
                 }
             }
         } else if ($notificationType == 'Complaint') {
             $complaint = Arr::get($postdata, 'complaint', []);
+            $complainedRecipients = Arr::get($complaint, 'complainedRecipients', []);
 
-            foreach ($complaint['complainedRecipients'] as $complainedRecipient) {
+            if (!$complainedRecipients) {
+                wp_send_json(['status' => 200, 'message' => __('No recipients', 'fluent-crm')], 200);
+            }
+
+            foreach ($complainedRecipients as $complainedRecipient) {
+                $email = $this->extractEmail(Arr::get($complainedRecipient, 'emailAddress', ''));
+                if (!$email) {
+                    continue;
+                }
+
                 $reason = Arr::get($complainedRecipient, 'diagnosticCode');
                 if (!$reason) {
-                    $reason = 'SES complained received as: ' . Arr::get($complaint, 'complaintFeedbackType');
+                    $reason = 'SES complaint received as: ' . Arr::get($complaint, 'complaintFeedbackType');
                 }
-                $data = [
-                    'email'  => $this->extractEmail(Arr::get($complainedRecipient, 'emailAddress')),
+
+                $this->recordUnsubscribe([
+                    'email'  => $email,
                     'reason' => $reason,
                     'status' => 'complained'
-                ];
-
-                $this->recordUnsubscribe($data);
+                ]);
             }
         }
 
@@ -214,21 +247,14 @@ class ExternalPages
         return false;
     }
 
-    private function recordSoftBounce($data)
+    public function recordSoftBounce($data)
     {
         if (!empty($data['email']) && is_email($data['email'])) {
             $email = sanitize_text_field($data['email']);
             $subscriber = Subscriber::where('email', $email)->first();
 
             if (!$subscriber) {
-                $contactData = Arr::only($data, ['email']);
-                if (!isset($contactData['created_at'])) {
-                    $contactData['created_at'] = current_time('mysql');
-                }
-                $contactData['status'] = 'bounced';
-                $contact = Subscriber::store($contactData);
-                fluentcrm_update_subscriber_meta($contact->id, 'reason', $data['reason']);
-                return true;
+                return false;
             }
 
             $existingCount = fluentcrm_get_subscriber_meta($subscriber->id, '_soft_bounce_count', 0);
@@ -241,12 +267,13 @@ class ExternalPages
              *
              * This filter allows you to change the default soft bounce limit.
              *
-             * @param int The default soft bounce limit. Default is 1.
+             * @param int The default soft bounce limit. Default is 5.
              * @since 2.7.0
              *
              */
-            $softCountLimit = apply_filters('fluent_crm/soft_bounce_limit', 1);
-            if ($existingCount <= $softCountLimit) {
+            $softCountLimit = apply_filters('fluent_crm/soft_bounce_limit', 5);
+
+            if ($existingCount < $softCountLimit) {
                 fluentcrm_update_subscriber_meta($subscriber->id, '_soft_bounce_count', ($existingCount + 1));
             } else {
                 $oldStatus = $subscriber->status;
@@ -255,7 +282,11 @@ class ExternalPages
                     fluentcrm_update_subscriber_meta($subscriber->id, 'reason', $data['reason']);
                 }
             }
+
+            return true;
         }
+
+        return false;
     }
 
     public function unsubscribePage()
@@ -275,10 +306,11 @@ class ExternalPages
         if ($this->request->method() == 'POST') {
             // This is List-Unsubscribe request
             if ($subscriber && $subscriber->status != 'unsubscribed') {
+                $campaignEmail = null;
                 if ($campaignEmailId) {
-                    $campaignEmail = CampaignEmail::find($campaignEmailId);
-                } else {
-                    $campaignEmail = null;
+                    $campaignEmail = CampaignEmail::where('id', (int) $campaignEmailId)
+                        ->where('subscriber_id', $subscriber->id)
+                        ->first();
                 }
 
                 do_action('fluent_crm/before_contact_unsubscribe_from_email', $subscriber, $campaignEmail, 'from_header');
@@ -306,7 +338,7 @@ class ExternalPages
             return;
         }
 
-        setcookie("fc_hash_secure", $subscriber->getSecureHash(), time() + 7776000, COOKIEPATH, COOKIE_DOMAIN);  /* expire in 90 days */
+        setcookie("fc_hash_secure", $subscriber->getSecureHash(), time() + 7776000, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true);  /* expire in 90 days */
 
         if ($campaignEmailId) {
             $campaignEmailId = (int)$campaignEmailId;
@@ -416,16 +448,11 @@ class ExternalPages
 
         $subscriber = Subscriber::where('email', $email)->first();
 
-        if (!$subscriber) {
-            wp_send_json_error([
-                'message' => __('Sorry! We could not verify your email address', 'fluent-crm')
-            ], 422);
-        }
-
-        if ($subscriber->status != 'subscribed') {
-            wp_send_json_error([
-                'message' => __('Looks like you are already unsubscribed', 'fluent-crm')
-            ], 422);
+        if (!$subscriber || $subscriber->status != 'subscribed') {
+            // Use the same success response to prevent email enumeration
+            wp_send_json_success([
+                'message' => __("If this email exists in our system, we've sent a confirmation link to your inbox.", 'fluent-crm')
+            ]);
         }
 
         // Let's send unsubscribe email with link
@@ -472,12 +499,13 @@ class ExternalPages
         $subscriber = Subscriber::where('email', $email)->first();
 
         if (!$subscriber) {
-            wp_send_json_error([
-                'message' => __('Sorry! We could not verify your email address', 'fluent-crm')
-            ], 422);
+            // Use the same success response to prevent email enumeration
+            wp_send_json_success([
+                'message' => __("If this email exists in our system, we've sent a confirmation link to your inbox.", 'fluent-crm')
+            ]);
         }
 
-        // Let's send unsubscribe email with link
+        // Let's send manage subscription email with link
         $data = [
             'business'                => fluentcrmGetGlobalSettings('business_settings', []),
             'manage_subscription_url' => add_query_arg(array_filter([
@@ -629,7 +657,13 @@ class ExternalPages
             'subscriber_id' => $subscriber->id,
             'type'          => 'system_log',
             'title'         => __('Unsubscribed', 'fluent-crm'),
-            'description'   => sprintf(__('Subscriber unsubscribed from IP Address: %1s <br />Reason: %2s', 'fluent-crm'), FluentCrm()->request->getIp(fluentCrmWillAnonymizeIp()), $reason)
+            /* translators: 1: IP address of the subscriber (may be anonymized), 2: unsubscribe reason */
+            'description'   => wp_kses(sprintf(__('Subscriber unsubscribed from IP Address: %1$s <br />Reason: %2$s', 'fluent-crm'),
+                esc_html(FluentCrm()->request->getIp(fluentCrmWillAnonymizeIp())),
+                esc_html($reason)
+            ),
+                array('br' => array())
+            )
         ]);
 
         $message = __("You've successfully unsubscribed from our email list.", 'fluent-crm');
@@ -661,8 +695,9 @@ class ExternalPages
     private function trackEmailOpen()
     {
         $mailHash = sanitize_text_field($this->request->get('_e_hash'));
-
         $emailId = (int)$this->request->get('_e_id');
+
+        $isAnonymous = isset($_REQUEST['ano']);
 
         if ($emailId) {
             $email = CampaignEmail::where('id', $emailId)->first();
@@ -675,22 +710,20 @@ class ExternalPages
         }
 
         if ($email) {
-            $updated = fluentCrmDb()->table('fc_campaign_emails')
-                ->where('id', $email->id)
-                ->where('is_open', 0)
-                ->update([
-                    'is_open' => 1
-                ]); // returns affected rows
+            if ($isAnonymous) {
+                do_action('fluent_crm/email_opened_anonymously', $email);
+            } else {
+                $updated = fluentCrmDb()->table('fc_campaign_emails')
+                    ->where('id', $email->id)
+                    ->where('is_open', 0)
+                    ->update([
+                        'is_open'    => 1,
+                        'updated_at' => current_time('mysql')
+                    ]); // returns affected rows
 
-            if ($updated) {
-                CampaignUrlMetric::maybeInsert([
-                    'type'          => 'open',
-                    'campaign_id'   => $email->campaign_id,
-                    'subscriber_id' => $email->subscriber_id,
-                    'ip_address'    => FluentCrm()->request->getIp(fluentCrmWillAnonymizeIp())
-                ]);
-
-                do_action('fluent_crm/email_opened', $email);
+                if ($updated) {
+                    do_action('fluent_crm/email_opened', $email);
+                }
             }
         }
 
@@ -704,7 +737,6 @@ class ExternalPages
         }
 
         @ini_set('zlib.output_compression', 'Off');
-
         // we are sending 1x1 pixel transparent gif image
         header('Content-Encoding: none');
         header('Content-Type: image/gif');
@@ -716,7 +748,9 @@ class ExternalPages
         // Transparent 1x1 GIF as hex format
         $image = base64_decode('R0lGODlhAQABAJAAAP8AAAAAACH5BAUQAAAALAAAAAABAAEAAAICBAEAOw==');
 
-        die($image);
+        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Intentionally outputting raw GIF bytes for the tracking pixel response
+        echo $image;
+        exit;
     }
 
     public function confirmationPage()
@@ -742,7 +776,7 @@ class ExternalPages
         } else {
             if (!is_user_logged_in()) {
                 $secureHash = fluentCrmGetContactSecureHash($subscriber->id);
-                setcookie("fc_hash_secure", $secureHash, time() + 7776000, COOKIEPATH, COOKIE_DOMAIN);  /* expire in 90 days */
+                setcookie("fc_hash_secure", $secureHash, time() + 7776000, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true);  /* expire in 90 days */
             }
 
             do_action('fluent_crm/track_activity_by_subscriber', $subscriber);
@@ -776,7 +810,7 @@ class ExternalPages
                  *
                  */
                 if (!is_user_logged_in() && apply_filters('fluent_crm/will_use_cookie', true)) {
-                    setcookie("fc_hash_secure", fluentCrmGetContactSecureHash($subscriber->id), time() + 7776000, COOKIEPATH, COOKIE_DOMAIN);  /* expire in 90 days */
+                    setcookie("fc_hash_secure", fluentCrmGetContactSecureHash($subscriber->id), time() + 7776000, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true);  /* expire in 90 days */
                 }
             }
 
@@ -857,7 +891,7 @@ class ExternalPages
 
         wp_enqueue_style(
             'fluentcrm_unsubscribe',
-            FLUENTCRM_PLUGIN_URL . 'assets/public/public_pref.css',
+            fluentCrmMix('public/public_pref.css'),
             [],
             FLUENTCRM_PLUGIN_VERSION
         );
@@ -887,7 +921,7 @@ class ExternalPages
         $postData = $this->request->get();
 
         if (empty($postData['email'])) {
-            $postData = (array)$this->request->getJson();
+            $postData = Helper::parseArrayOrJson($this->request->getContent(), []);
         }
 
         if (empty($hash = $this->request->get('hash'))) {
@@ -1069,14 +1103,6 @@ class ExternalPages
 
         if ($managedSecureHash) {
             $subscriber = fluentCrmApi('contacts')->getContactByManagedSecureHash($managedSecureHash);
-
-            /*
-             * remove this at march 2024
-             */
-            if (!$subscriber) {
-                $subscriber = fluentCrmApi('contacts')->getContactBySecureHash($managedSecureHash);
-            }
-
             if ($subscriber && $subscriber->id != $contactId) {
                 return;
             }
@@ -1085,6 +1111,20 @@ class ExternalPages
         if (!$subscriber) {
             $this->manageSubscriptionRequestForm();
             return;
+        }
+
+        $emailSettings = Helper::getGlobalEmailSettings();
+        if (Arr::get($emailSettings, 'show_on_page') == 'yes' && Arr::get($emailSettings, 'pref_form') == 'yes' && !empty(Arr::get($emailSettings, 'pref_general')) && Arr::get($emailSettings, 'pref_page_id')) {
+            $pageId = Arr::get($emailSettings, 'pref_page_id');
+            $pageUrl = get_permalink($pageId);
+            if ($pageUrl) {
+                if(!is_user_logged_in()) {
+                    setcookie("fc_hash_secure", $subscriber->getSecureHash(), time() + 7776000, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true);  /* expire in 90 days */
+                }
+                $pageUrl = add_query_arg('_signed_at', time(), $pageUrl);
+                wp_redirect($pageUrl);
+                exit();
+            }
         }
 
         $this->loadAssets();
@@ -1182,8 +1222,8 @@ class ExternalPages
 
             $subscriber->status = 'pending';
             $subscriber->email = $email;
-            $subscriber->first_name = sanitize_text_field($_REQUEST['first_name']);
-            $subscriber->last_name = sanitize_text_field($_REQUEST['last_name']);
+            $subscriber->first_name = sanitize_text_field(Arr::get($_REQUEST, 'first_name', ''));
+            $subscriber->last_name = sanitize_text_field(Arr::get($_REQUEST, 'last_name', ''));
             $subscriber->save();
             $subscriber->sendDoubleOptinEmail();
 
@@ -1195,14 +1235,18 @@ class ExternalPages
             }
 
             wp_send_json_success([
-                'message' => sprintf(__('A confirmation email has been sent to %s. Please confirm your email address to resubscribe with changed email address', 'fluent-crm'), $email)
+                'message' => sprintf(
+                /* translators: %s: the new email address to which confirmation was sent */
+                    esc_html__('A confirmation email has been sent to %s. Please confirm your email address to resubscribe with changed email address', 'fluent-crm'),
+                    esc_html(sanitize_email($email))
+                )
             ], 200);
             return;
         }
 
         // Just update the info
-        $subscriber->first_name = sanitize_text_field($_REQUEST['first_name']);
-        $subscriber->last_name = sanitize_text_field($_REQUEST['last_name']);
+        $subscriber->first_name = sanitize_text_field(Arr::get($_REQUEST, 'first_name', ''));
+        $subscriber->last_name = sanitize_text_field(Arr::get($_REQUEST, 'last_name', ''));
         $subscriber->save();
 
         if ($addedLists) {
@@ -1216,7 +1260,11 @@ class ExternalPages
         if ($subscriber->status != 'subscribed') {
             $subscriber->sendDoubleOptinEmail();
             wp_send_json_success([
-                'message' => sprintf(__('A confirmation email has been sent to %s. Please confirm your email address to resubscribe', 'fluent-crm'), $email)
+                'message' => sprintf(
+                /* translators: %s: the email address to which confirmation was sent */
+                    esc_html__('A confirmation email has been sent to %s. Please confirm your email address to resubscribe', 'fluent-crm'),
+                    esc_html(sanitize_email($email))
+                )
             ], 200);
         }
 
@@ -1253,14 +1301,14 @@ class ExternalPages
 
         wp_enqueue_style(
             'fluentcrm_public_pref',
-            FLUENTCRM_PLUGIN_URL . 'assets/public/public_pref.css',
+            fluentCrmMix('public/public_pref.css'),
             [],
             FLUENTCRM_PLUGIN_VERSION
         );
 
         wp_enqueue_script(
             'fluentcrm_public_pref',
-            FLUENTCRM_PLUGIN_URL . 'assets/public/public_pref.js',
+            fluentCrmMix('public/public_pref.js'),
             ['jquery'],
             FLUENTCRM_PLUGIN_VERSION
         );
@@ -1300,11 +1348,13 @@ class ExternalPages
 
     public function handleBackgroundProcessCallback()
     {
-        $callbackName = sanitize_text_field($_REQUEST['callback_name']);
-        if (!wp_verify_nonce($_REQUEST['nonce'], 'fluentcrm_callback_for_background')) {
+        $callbackName = sanitize_text_field(Arr::get($_REQUEST, 'callback_name'));
+        $nonce = Arr::get($_REQUEST, 'nonce');
+
+        if (!$callbackName || !$nonce || !wp_verify_nonce($nonce, 'fluentcrm_callback_for_background')) {
             die('Security Check Failed');
         }
-        $data = $_REQUEST['payload'];
+        $data = Arr::get($_REQUEST, 'payload', []);
         do_action($callbackName, $data);
         echo 'success';
         die();
@@ -1352,7 +1402,7 @@ class ExternalPages
                 'email'         => null,
                 'email_body'    => '<h2 style=\'text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif\'>Sorry, web preview could not be loaded</h2>',
                 'cssAssets'     => [
-                    FLUENTCRM_PLUGIN_URL . 'assets/public/public_pref.css?version=' . FLUENTCRM_PLUGIN_VERSION
+                    fluentCrmMix('public/public_pref.css') . '?version=' . FLUENTCRM_PLUGIN_VERSION
                 ],
                 'footer_text'   => ''
             ]);
@@ -1367,7 +1417,8 @@ class ExternalPages
 
         $rawTemplates = [
             'raw_html',
-            'visual_builder'
+            'visual_builder',
+            'raw_classic'
         ];
 
         if (in_array($email->campaign->design_template, $rawTemplates)) {
@@ -1506,9 +1557,9 @@ class ExternalPages
             );
         }
 
-        if (strpos($content, '{{crm') || strpos($content, '##crm')) {
+        if (Str::contains($content, ['{{crm', '##crm'])) {
             $content = str_replace(['{{crm_global_email_footer}}', '{{crm_preheader_text}}'], ['', $preHeader], $content);
-            if (strpos($content, '##crm.') || strpos($content, '{{crm.')) {
+            if (Str::contains($content, ['##crm.', '{{crm.'])) {
                 /**
                  * Determine the Smartcode text content before it is parsed in FluentCRM.
                  *
@@ -1547,7 +1598,7 @@ class ExternalPages
         $preViewUrl = site_url('?fluentcrm=1&route=email_preview&_e_hash=' . $email->email_hash);
         $content = str_replace(['##web_preview_url##', '{{crm_global_email_footer}}', '{{crm_preheader_text}}'], [$preViewUrl, $footerText, $preHeader], $content);
 
-        if (strpos($content, '##crm.') || strpos($content, '{{crm.')) {
+        if (Str::contains($content, ['##crm.', '{{crm.'])) {
             /**
              * Determine the Smartcode text content before it is parsed in FluentCRM.
              *
@@ -1571,7 +1622,7 @@ class ExternalPages
                 'rendered' => $content
             ],
             'cssAssets'     => [
-                FLUENTCRM_PLUGIN_URL . 'assets/public/public_pref.css?version=' . FLUENTCRM_PLUGIN_VERSION
+                fluentCrmMix('public/public_pref.css') . '?version=' . FLUENTCRM_PLUGIN_VERSION
             ]
         ];
 
@@ -1615,7 +1666,7 @@ class ExternalPages
                 'email'         => null,
                 'email_body'    => '<h2 style=\'text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif\'>Sorry, web preview could not be loaded</h2>',
                 'cssAssets'     => [
-                    FLUENTCRM_PLUGIN_URL . 'assets/public/public_pref.css?version=' . FLUENTCRM_PLUGIN_VERSION
+                    fluentCrmMix('public/public_pref.css') . '?version=' . FLUENTCRM_PLUGIN_VERSION
                 ],
                 'footer_text'   => ''
             ]);
@@ -1628,7 +1679,8 @@ class ExternalPages
             // Let's generate the email body
             $rawTemplates = [
                 'raw_html',
-                'visual_builder'
+                'visual_builder',
+                'raw_classic'
             ];
 
             if (in_array($campaign->design_template, $rawTemplates)) {
@@ -1734,7 +1786,7 @@ class ExternalPages
                 'rendered' => $content
             ],
             'cssAssets'     => [
-                FLUENTCRM_PLUGIN_URL . 'assets/public/public_pref.css?version=' . FLUENTCRM_PLUGIN_VERSION
+                fluentCrmMix('public/public_pref.css') . '?version=' . FLUENTCRM_PLUGIN_VERSION
             ]
         ];
 
