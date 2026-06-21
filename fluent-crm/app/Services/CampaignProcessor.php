@@ -61,19 +61,17 @@ class CampaignProcessor
             $perChunk = (int)apply_filters('fluent_crm/process_subscribers_per_request', 30);
         }
 
-        $subscribersModel = $campaign->getSubscribersModel($campaign->settings);
-
-        if (!$subscribersModel) {
-            return false;
-        }
-
         if (!$this->acquireProcessingLock()) {
             // Return false (not $campaign) so the caller doesn't fire
             // another AJAX chain while the lock is held by another process.
             return false;
         }
 
-        $subscribersModel = $subscribersModel->limit($perChunk)->offset($campaign->recipients_count);
+        $subscribersModel = $this->getSubscribersChunk($campaign, $perChunk);
+        if (!$subscribersModel) {
+            $this->releaseProcessingLock();
+            return false;
+        }
 
         $result = $this->subscribe($campaign, $subscribersModel);
 
@@ -86,7 +84,12 @@ class CampaignProcessor
 
             if ($willRun) {
                 $this->refreshProcessingLock();
-                $subscribersModel = $subscribersModel->limit($perChunk)->offset($campaign->recipients_count);
+                $subscribersModel = $this->getSubscribersChunk($campaign, $perChunk);
+                if (!$subscribersModel) {
+                    $this->releaseProcessingLock();
+                    return false;
+                }
+
                 $result = $this->subscribe($campaign, $subscribersModel);
             }
         }
@@ -99,6 +102,7 @@ class CampaignProcessor
             if ($campaign->status == 'processing') {
                 $campaign->status = 'scheduled';
                 $campaign->save();
+                fluentcrm_update_campaign_meta($campaign->id, '_last_recipient_id', 0);
             }
 
             CampaignEmail::where('campaign_id', $campaign->id)
@@ -113,6 +117,27 @@ class CampaignProcessor
         return $campaign;
     }
 
+    /**
+     * Get the next stable subscriber chunk for campaign email materialization.
+     */
+    private function getSubscribersChunk($campaign, $perChunk)
+    {
+        $subscribersModel = $campaign->getSubscribersModel($campaign->settings);
+        if (!$subscribersModel) {
+            return false;
+        }
+
+        $lastRecipientId = absint(fluentcrm_get_campaign_meta($campaign->id, '_last_recipient_id', true));
+
+        return $subscribersModel
+            ->where('fc_subscribers.id', '>', $lastRecipientId)
+            ->reorder('fc_subscribers.id', 'ASC')
+            ->limit($perChunk);
+    }
+
+    /**
+     * Materialize a subscriber chunk and advance the cursor after rows are created.
+     */
     private function subscribe($campaign, $subscribersModel)
     {
         $subscribers = $subscribersModel->get();
@@ -120,10 +145,14 @@ class CampaignProcessor
             return [];
         }
 
-        return $campaign->subscribe($subscribers, [
+        $result = $campaign->subscribe($subscribers, [
             'status'       => $this->initialStatus,
             'scheduled_at' => $campaign->getEmailScheduleAt(),
         ], true);
+
+        fluentcrm_update_campaign_meta($campaign->id, '_last_recipient_id', $subscribers->max('id'));
+
+        return $result;
     }
 
     /**

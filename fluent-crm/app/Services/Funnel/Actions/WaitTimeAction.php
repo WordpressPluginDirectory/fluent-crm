@@ -110,6 +110,10 @@ class WaitTimeAction extends BaseAction
                     'wrapper_class' => 'fc_2col_inline',
                     'options'       => [
                         [
+                            'id'    => 'months',
+                            'title' => __('Months', 'fluent-crm')
+                        ],
+                        [
                             'id'    => 'days',
                             'title' => __('Days', 'fluent-crm')
                         ],

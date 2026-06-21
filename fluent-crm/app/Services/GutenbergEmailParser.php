@@ -20,6 +20,8 @@ class GutenbergEmailParser
 
     private $childCss = '';
 
+    private static $rssRenderCache = [];
+
     private $autoPaddedElements = [
         'core/heading',
         'core/paragraph',
@@ -584,6 +586,9 @@ class GutenbergEmailParser
             case 'core/table': // done
                 return $this->renderTable($innerHTML, $attrs);
 
+            case 'core/rss': // done
+                return $this->renderRss($attrs);
+
             case 'fluentcrm/woo-product':
             case 'fluent-crm/woo-product':
                 return $this->renderWooProductBlock($block, $attrs, $innerHTML);
@@ -862,6 +867,210 @@ class GutenbergEmailParser
         }, $content, 1);
 
         return $content;
+    }
+
+    /**
+     * Render the core RSS block with email-safe markup.
+     *
+     * @param array $attrs Block attributes.
+     * @return string
+     */
+    private function renderRss($attrs)
+    {
+        $feedUrl = esc_url_raw((string)Arr::get($attrs, 'feedURL', ''));
+        if (!$feedUrl || !$this->isSafeRssFeedUrl($feedUrl)) {
+            return '';
+        }
+
+        $rssCacheKey = md5(wp_json_encode([
+            'feed_url'       => $feedUrl,
+            'items_to_show'  => (int)Arr::get($attrs, 'itemsToShow', 5),
+            'display_date'   => !empty($attrs['displayDate']),
+            'display_author' => !empty($attrs['displayAuthor']),
+            'display_excerpt' => !empty($attrs['displayExcerpt']),
+            'excerpt_length' => (int)Arr::get($attrs, 'excerptLength', 55),
+            'open_new_tab'   => !empty($attrs['openInNewTab']),
+            'rel'            => (string)Arr::get($attrs, 'rel', '')
+        ]));
+
+        if (isset(self::$rssRenderCache[$rssCacheKey])) {
+            return $this->wrapRssHtmlWithCurrentBlock(self::$rssRenderCache[$rssCacheKey], $attrs);
+        }
+
+        if (!function_exists('fetch_feed') && defined('ABSPATH') && defined('WPINC')) {
+            require_once ABSPATH . WPINC . '/feed.php';
+        }
+
+        if (!function_exists('fetch_feed')) {
+            return '';
+        }
+
+        $rssRequestArgsFilter = function ($requestArgs, $url) use ($feedUrl) {
+            if ($url === $feedUrl) {
+                $requestArgs['timeout'] = 5;
+                $requestArgs['redirection'] = 3;
+                $requestArgs['reject_unsafe_urls'] = true;
+            }
+
+            return $requestArgs;
+        };
+
+        add_filter('http_request_args', $rssRequestArgsFilter, 10, 2);
+        $rss = fetch_feed($feedUrl);
+        remove_filter('http_request_args', $rssRequestArgsFilter, 10);
+
+        if (is_wp_error($rss) || !$rss || !method_exists($rss, 'get_item_quantity')) {
+            return '';
+        }
+
+        $itemsToShow = max(1, min(20, (int)Arr::get($attrs, 'itemsToShow', 5)));
+        $quantity = $rss->get_item_quantity($itemsToShow);
+        if (!$quantity) {
+            return '';
+        }
+
+        $items = $rss->get_items(0, $quantity);
+        if (!$items) {
+            return '';
+        }
+
+        $listItems = '';
+        $displayDate = !empty($attrs['displayDate']);
+        $displayAuthor = !empty($attrs['displayAuthor']);
+        $displayExcerpt = !empty($attrs['displayExcerpt']);
+        $excerptLength = max(1, (int)Arr::get($attrs, 'excerptLength', 55));
+        $openInNewTab = !empty($attrs['openInNewTab']);
+        $rel = trim((string)Arr::get($attrs, 'rel', ''));
+
+        $linkAttrs = '';
+        if ($openInNewTab) {
+            $linkAttrs .= ' target="_blank"';
+        }
+        if ($rel !== '') {
+            $linkAttrs .= ' rel="' . esc_attr($rel) . '"';
+        }
+
+        foreach ($items as $item) {
+            $title = trim(wp_strip_all_tags(html_entity_decode((string)$item->get_title(), ENT_QUOTES, get_option('blog_charset'))));
+            if ($title === '') {
+                $title = __('(no title)', 'fluent-crm');
+            }
+
+            $link = esc_url((string)$item->get_link());
+            $titleHtml = $link
+                ? '<a href="' . $link . '"' . $linkAttrs . '>' . esc_html($title) . '</a>'
+                : esc_html($title);
+
+            $metaHtml = '';
+
+            if ($displayDate) {
+                $timestamp = $item->get_date('U');
+                if ($timestamp) {
+                    $gmtOffset = get_option('gmt_offset');
+                    $timestamp += (int)((float)$gmtOffset * HOUR_IN_SECONDS);
+                    $metaHtml .= '<span class="wp-block-rss__item-publish-date" style="display:block;font-size:13px;color:#6b7280;">' .
+                        esc_html(date_i18n(get_option('date_format'), $timestamp)) .
+                        '</span>';
+                }
+            }
+
+            if ($displayAuthor) {
+                $author = $item->get_author();
+                if (is_object($author) && method_exists($author, 'get_name')) {
+                    $authorName = trim(wp_strip_all_tags((string)$author->get_name()));
+                    if ($authorName !== '') {
+                        $metaHtml .= '<span class="wp-block-rss__item-author" style="display:block;font-size:13px;color:#6b7280;">' .
+                            sprintf(
+                                /* translators: %s: author name. */
+                                esc_html__('by %s', 'fluent-crm'),
+                                esc_html($authorName)
+                            ) .
+                            '</span>';
+                    }
+                }
+            }
+
+            $excerptHtml = '';
+            if ($displayExcerpt) {
+                $description = html_entity_decode((string)$item->get_description(), ENT_QUOTES, get_option('blog_charset'));
+                $description = trim(wp_strip_all_tags($description));
+                if ($description !== '') {
+                    $excerptHtml = '<div class="wp-block-rss__item-excerpt" style="margin-top:6px;">' .
+                        esc_html(wp_trim_words($description, $excerptLength, ' [...]')) .
+                        '</div>';
+                }
+            }
+
+            $listItems .= '<div class="wp-block-rss__item" style="margin-bottom:12px;">' .
+                '<div class="wp-block-rss__item-title">' . $titleHtml . '</div>' .
+                $metaHtml .
+                $excerptHtml .
+                '</div>';
+        }
+
+        if (!$listItems) {
+            return '';
+        }
+
+        self::$rssRenderCache[$rssCacheKey] = $listItems;
+
+        return $this->wrapRssHtmlWithCurrentBlock($listItems, $attrs);
+    }
+
+    /**
+     * Validate RSS feed URLs before the server fetches remote content.
+     *
+     * @param string $url Feed URL.
+     * @return bool
+     */
+    private function isSafeRssFeedUrl($url)
+    {
+        $parsed = wp_parse_url($url);
+        if (!$parsed || empty($parsed['host'])) {
+            return false;
+        }
+
+        $scheme = strtolower(isset($parsed['scheme']) ? $parsed['scheme'] : '');
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return false;
+        }
+
+        $host = trim($parsed['host'], '[]');
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            $ip = $host;
+        } else {
+            $ip = gethostbyname($host);
+            if ($ip === $host && !filter_var($ip, FILTER_VALIDATE_IP)) {
+                return false;
+            }
+        }
+
+        $isSafe = (bool)filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+
+        /**
+         * Allow site owners to enforce custom RSS feed source policies.
+         *
+         * @param bool   $isSafe Whether the feed URL resolves to a public IP.
+         * @param string $url    Feed URL.
+         * @param string $host   Parsed URL host.
+         * @param string $ip     Resolved host IP.
+         */
+        return (bool)apply_filters('fluent_crm/rss_block_is_safe_feed_url', $isSafe, $url, $host, $ip);
+    }
+
+    /**
+     * Wrap cached RSS list items with the current block id and table attributes.
+     *
+     * @param string $listItems Rendered RSS item markup.
+     * @param array  $attrs Block attributes.
+     * @return string
+     */
+    private function wrapRssHtmlWithCurrentBlock($listItems, $attrs)
+    {
+        $elementId = esc_attr(Arr::get($attrs, 'elem_id', ''));
+        $html = '<div id="' . $elementId . '" class="wp-block-rss" style="padding:0;margin:0;">' . $listItems . '</div>';
+
+        return $this->wrapInTable($html, $attrs);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace FluentCrm\App\Services\Libs\Mailer;
 
+use FluentCrm\App\Hooks\Handlers\Scheduler;
 use FluentCrm\App\Models\CampaignEmail;
 use FluentCrm\App\Services\Helper;
 use FluentCrm\Framework\Support\Arr;
@@ -81,12 +82,11 @@ class Handler extends BaseHandler
         if ($this->sentCount || random_int(0, 50) > 20) { // sometimes we want to check this
             $lastChecked = fluentCrmGetOptionCache('_fcrm_last_email_process_cleanup', 600);
             if (!$lastChecked || time() - $lastChecked > 70) {
-                $dateStamp = gmdate('Y-m-d H:i:s', (current_time('timestamp') - $this->maximumProcessingTime - 30));
-                CampaignEmail::where('status', 'processing')
-                    ->where('updated_at', '<', $dateStamp)
-                    ->update([
-                        'status' => 'pending'
-                    ]);
+                // Keep stale-row recovery in the scheduler helper so all callers
+                // use the same chunking, sender-lock guard, and deferred logging.
+                // A direct UPDATE here can overlap with a chained ajax/cron sender
+                // that is claiming rows and can reproduce the same deadlock class.
+                Scheduler::resetStaleProcessingEmails($this->maximumProcessingTime + 30, $this->runnerTitle);
                 fluentCrmSetOptionCache('_fcrm_last_email_process_cleanup', time(), 600);
             }
         }
@@ -103,20 +103,10 @@ class Handler extends BaseHandler
     {
         $this->calledFrom = Arr::get($_REQUEST, 'action') == 'fluentcrm-post-campaigns-send-now' ? 'ajax' : 'cron';
 
-        fluentcrm_update_option($this->optionKey . '_last_called', time());
-
+        // Cheap guards first — in-process re-entrancy and the hard kill-switch.
+        // No point taking the lock if processing is disabled for this request.
         if (did_action('fluent_crm/sending_emails_starting') || apply_filters('fluent_crm/disable_email_processing', false)) {
             return false;
-        }
-
-        $this->startingTimeStamp = time();
-        $this->isMultiThread = Helper::willMultiThreadEmail();
-
-        if ($this->isMultiThread) {
-            if (!as_has_scheduled_action('fluent_crm_send_multi_thread_emails', [], 'fluent-crm')) {
-                Helper::debugLog('Scheduling multi thread emails', 'extended log');
-                as_schedule_recurring_action(time(), 60, 'fluent_crm_send_multi_thread_emails', [], 'fluent-crm', false);
-            }
         }
 
         if ($this->memoryExceeded()) {
@@ -138,7 +128,41 @@ class Handler extends BaseHandler
             $this->maximumProcessingTime = $systemMaxProcessingTime;
         }
 
+        // Acquire the lock before any expensive work. The atomic lock — not any
+        // cron-timing pre-check — is the authoritative guard against concurrent
+        // and duplicate sends, so cron, the AJAX continuation, and send-now can
+        // all call handle() directly and let the loser bail right here after a
+        // single atomic op. Acquiring early avoids paying for the
+        // willMultiThreadEmail() COUNT(*) on a potentially multi-million-row
+        // table only to discover another runner already holds the lock.
+        // (memoryExceeded above is checked before this, so there is no lock to
+        // release on that early return.)
         if (!$this->acquireLock()) {
+            return false;
+        }
+
+        // The lock is now held. handle() calls isSystemOk() OUTSIDE its
+        // try/catch, so anything that throws below (a DB error on the _last_called
+        // write or the willMultiThreadEmail() count) would escape uncaught and
+        // leave the lock orphaned until its ~80s TTL. Guard it here so a failure
+        // releases the lock immediately instead.
+        try {
+            // Record the start of an actual (lock-winning) send cycle.
+            // callBackGround() reads this to keep the loopback continuation alive.
+            fluentcrm_update_option($this->optionKey . '_last_called', time());
+
+            $this->startingTimeStamp = time();
+            $this->isMultiThread = Helper::willMultiThreadEmail();
+
+            if ($this->isMultiThread) {
+                if (!as_has_scheduled_action('fluent_crm_send_multi_thread_emails', [], 'fluent-crm')) {
+                    Helper::debugLog('Scheduling multi thread emails', 'extended log');
+                    as_schedule_recurring_action(time(), 60, 'fluent_crm_send_multi_thread_emails', [], 'fluent-crm', false);
+                }
+            }
+        } catch (\Throwable $e) {
+            $this->releaseLock();
+            Helper::debugLog('isSystemOk post-lock failure at ' . $this->runnerTitle, $e->getMessage(), 'error');
             return false;
         }
 
@@ -353,39 +377,45 @@ class Handler extends BaseHandler
     }
 
     /**
-     * Fire a non-blocking POST request using cURL directly.
+     * Fire a non-blocking POST request to continue the sender chain.
      *
-     * Bypasses WordPress's WP_Http which adds SSL verification filters
-     * that break loopback requests on local/self-signed cert environments.
-     * Connection timeout is 1 second — we don't wait for the response.
+     * cURL stays the first transport because it bypasses WP_Http SSL filters
+     * that can break local/self-signed loopbacks. If cURL times out or fails,
+     * fall back silently to WordPress HTTP and log only in FluentCRM debug logs.
      *
      * @param string $url
-     * @param array $body POST body data
+     * @param array  $body POST body data
      */
     public static function fireNonBlockingRequest($url, $body = [])
     {
+        $timeout = max(1, (int)apply_filters('fluent_crm/non_blocking_request_timeout', 3, $url, $body));
+        $connectTimeout = max(1, (int)apply_filters('fluent_crm/non_blocking_request_connect_timeout', 2, $url, $body));
+
+        if (apply_filters('fluent_crm/non_blocking_request_use_wp_http', false, $url, $body)) {
+            self::fireNonBlockingWpRequest($url, $body, $timeout);
+            return;
+        }
+
         if (!function_exists('curl_init')) {
-            // Fallback to wp_remote_post if cURL not available
-            add_filter('https_local_ssl_verify', '__return_false');
-            wp_remote_post($url, [
-                'sslverify' => false,
-                'blocking'  => false,
-                'timeout'   => 1,
-                'body'      => $body
-            ]);
-            remove_filter('https_local_ssl_verify', '__return_false');
+            self::fireNonBlockingWpRequest($url, $body, $timeout);
             return;
         }
 
         $ch = curl_init($url);
+        if (!$ch) {
+            Helper::debugLog('FluentCRM non-blocking cURL request failed', 'Unable to initialize cURL. URL: ' . esc_url_raw($url), 'extended');
+            self::fireNonBlockingWpRequest($url, $body, $timeout);
+            return;
+        }
+
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => http_build_query($body),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => false,
-            CURLOPT_TIMEOUT        => 1,
-            CURLOPT_CONNECTTIMEOUT => 1,
+            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_CONNECTTIMEOUT => $connectTimeout,
             CURLOPT_NOSIGNAL       => true,
             CURLOPT_HTTPHEADER     => [
                 'Content-Type: application/x-www-form-urlencoded',
@@ -393,7 +423,41 @@ class Handler extends BaseHandler
         ]);
 
         // Fire and forget — we don't need the response
-        curl_exec($ch);
+        $response = curl_exec($ch);
+        $errorNo = curl_errno($ch);
+        $error = curl_error($ch);
         curl_close($ch);
+
+        if (!$errorNo && $response !== false) {
+            return;
+        }
+
+        $errorMessage = $errorNo ? ('Error #' . $errorNo . ': ' . $error) : 'Unknown cURL failure';
+        Helper::debugLog('FluentCRM non-blocking cURL request failed', $errorMessage . ' URL: ' . esc_url_raw($url), 'extended');
+
+        self::fireNonBlockingWpRequest($url, $body, $timeout);
+    }
+
+    /**
+     * Fire the sender-chain request via WordPress HTTP as a fallback transport.
+     *
+     * @param string $url
+     * @param array  $body
+     * @param int    $timeout
+     */
+    private static function fireNonBlockingWpRequest($url, $body, $timeout)
+    {
+        add_filter('https_local_ssl_verify', '__return_false');
+        $response = wp_remote_post($url, [
+            'sslverify' => false,
+            'blocking'  => false,
+            'timeout'   => $timeout,
+            'body'      => $body
+        ]);
+        remove_filter('https_local_ssl_verify', '__return_false');
+
+        if (is_wp_error($response)) {
+            Helper::debugLog('FluentCRM non-blocking WP HTTP request failed', $response->get_error_message() . ' URL: ' . esc_url_raw($url), 'extended');
+        }
     }
 }

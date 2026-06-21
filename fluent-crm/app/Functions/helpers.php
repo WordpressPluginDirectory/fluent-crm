@@ -1670,15 +1670,10 @@ function fluentCrmGetContactManagedHash($contactId)
         ->first();
 
     if ($exist) {
-        if (time() - strtotime($exist->updated_at) > 60 * 60 * 24 * 30) {
-            $hash = md5(wp_generate_uuid4() . '_' . $contactId . '_' . '_' . time()) . '__' . $contactId;
-            $exist->value = $hash;
-            $exist->updated_at = current_time('mysql');
-            $exist->save();
-            $cache[$contactId] = $hash;
-            return $hash;
-        }
-
+        // The managed hash is stable for the life of the contact so that List-Unsubscribe
+        // and manage-subscription links keep resolving however long an email lingers in an
+        // inbox. It is rotated only on an explicit security event — a WordPress password
+        // change (see Cleanup::handleUserPasswordChanged()).
         $cache[$contactId] = $exist->value;
         return $exist->value;
     }

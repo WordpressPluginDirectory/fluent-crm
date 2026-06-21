@@ -1404,7 +1404,6 @@ class CampaignController extends Controller
 
     public function getCampaignStatus(Request $request, $campaignId)
     {
-        $requestCounter = $request->get('request_counter');
         $campaign = Campaign::withoutGlobalScope('type')
             ->with(['subjects'])
             ->whereIn('type', fluentCrmAutoProcessCampaignTypes())
@@ -1433,29 +1432,54 @@ class CampaignController extends Controller
         if ($campaign->status == 'working') {
             $ranged = $campaign->rangedScheduleDates();
             if (!$ranged) {
-                if (($requestCounter % 4) === 0) {
-                    $lastChecked = fluentCrmGetOptionCache('_fcrm_last_email_process_cleanup', 600);
-                    if (!$lastChecked || time() - $lastChecked > 140) {
-                        Scheduler::resetStaleProcessingEmails(150, 'getCampaignStatus');
-                        fluentCrmSetOptionCache('_fcrm_last_email_process_cleanup', time(), 600);
-                    }
-                }
+                // Keep this status-polling GET endpoint read-mostly. It used to
+                // reset stale 'processing' campaign emails here, but this route is
+                // called every few seconds from the campaign screen. Doing queue
+                // recovery from this hot polling path can collide with the sender's
+                // row claims/updates and produce avoidable InnoDB deadlocks. Stale
+                // email recovery now stays in Scheduler::resetStaleProcessingEmails().
 
-                $lastEmailTimestamp = get_option('fluentcrm_is_sending_emails');
-                if ($lastEmailTimestamp && (time() - $lastEmailTimestamp) > 140) {
-                    // Looks like it's in stuck so we are resetting this
-                    update_option('fluentcrm_is_sending_emails', null);
-                    wp_remote_post(admin_url('admin-ajax.php'), [
-                        'sslverify' => false,
-                        'blocking'  => false,
-                        'cookies'   => array(),
-                        'body'      => [
-                            'campaign_id' => $campaignId,
-                            'retry'       => 1,
-                            'time'        => time(),
-                            'action'      => 'fluentcrm-post-campaigns-send-now'
-                        ]
-                    ]);
+                // Detect a stalled send cycle. Do NOT key this off the sending
+                // lock: on sites with an external object cache the lock lives in
+                // the fc_instant_options cache group (not wp_options, so the old
+                // get_option() read missed it entirely) and auto-expires after
+                // ~80s, so a 140s threshold would never see it. Instead key off
+                // _last_called, which Handler::isSystemOk() stamps in the fc_meta
+                // "option" store on every lock-winning run — persistent, has no
+                // TTL, and is identical on object-cache and DB-only sites.
+                $lastCalled = (int)fluentcrm_get_option('fluentcrm_is_sending_emails_last_called');
+                if (!$lastCalled || (time() - $lastCalled) > 140) {
+                    // No send activity for >140s while the campaign is still
+                    // 'working' — treat as stuck. Throttle the re-fire so frequent
+                    // status polling doesn't spam loopback requests; one kick per
+                    // 60s is enough for a healthy run to resume and refresh
+                    // _last_called (which then clears this condition).
+                    $lastRefire = fluentCrmGetOptionCache('_fcrm_last_stuck_refire', 200);
+                    if (!$lastRefire || (time() - $lastRefire) > 60) {
+                        fluentCrmSetOptionCache('_fcrm_last_stuck_refire', time(), 200);
+
+                        // Deliberately do NOT force-clear the lock here. If sending
+                        // has truly stalled for >140s the lock is already well past
+                        // its ~80s timeout, so the re-fired handler's acquireLock()
+                        // steals it on its own (DB: expired-timestamp UPDATE; object
+                        // cache: the key has already TTL'd away). Clearing it
+                        // explicitly would only change anything while a sender is
+                        // still holding a *fresh* lock — i.e. a long run under a
+                        // raised maximumProcessingTime — and releasing it there would
+                        // let a second sender run concurrently (rate-limit overshoot).
+                        // Let acquireLock() be the single arbiter of ownership.
+                        wp_remote_post(admin_url('admin-ajax.php'), [
+                            'sslverify' => false,
+                            'blocking'  => false,
+                            'cookies'   => array(),
+                            'body'      => [
+                                'campaign_id' => $campaignId,
+                                'retry'       => 1,
+                                'time'        => time(),
+                                'action'      => 'fluentcrm-post-campaigns-send-now'
+                            ]
+                        ]);
+                    }
                 }
             }
         }
@@ -1477,15 +1501,10 @@ class CampaignController extends Controller
                 ->where('status', 'processing')
                 ->count();
 
-            if ($processingCount) {
-                $maximumProcessingTime = fluentCrmMaxRunTime() + 40;
-                CampaignEmail::where('campaign_id', $campaignId)
-                    ->where('status', 'processing')
-                    ->where('updated_at', '<', gmdate('Y-m-d H:i:s', (current_time('timestamp') - $maximumProcessingTime)))
-                    ->update([
-                        'status' => 'pending'
-                    ]);
-            } else if ($sentCount) {
+            // Do not reset stale 'processing' rows from campaign status polling.
+            // If there are still rows in processing, report that state and let the
+            // scheduler-owned recovery path decide when it is safe to requeue them.
+            if (!$processingCount && $sentCount) {
                 $futureCount = CampaignEmail::select('id')
                     ->where('campaign_id', $campaignId)
                     ->whereIn('status', ['pending', 'scheduled', 'paused', 'processing', 'draft'])

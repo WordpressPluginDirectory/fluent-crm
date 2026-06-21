@@ -1507,93 +1507,63 @@ class ExternalPages
             $preHeader = apply_filters('fluent_crm/parse_campaign_email_text', $preHeader, $subscriber);
         }
 
+        $emailFooterConfig = Helper::getFooterConfig($email->campaign);
+        $emailFooterConfig['footer_content'] = $footerText;
+
         $templateData = [
-            'preHeader'   => $preHeader,
-            'email_body'  => $emailBody,
-            'footer_text' => $footerText,
-            'config'      => $templateConfig
+            'preHeader'    => $preHeader,
+            'email_body'   => $emailBody,
+            'footer_text'  => $footerText,
+            'footer_config' => $emailFooterConfig,
+            'config'       => $templateConfig
         ];
 
-        if ($email->campaign->design_template == 'visual_builder' || $email->campaign->design_template == 'raw_html') {
-            $content = $emailBody;
-            if ($email->campaign->design_template == 'visual_builder') {
-                /**
-                 * Determine the email design template content in the visual builder in FluentCRM.
-                 *
-                 * @param string $content The email content.
-                 * @param array $templateData The template data.
-                 * @param object $email ->campaign The email campaign object.
-                 * @param object $email ->subscriber The email subscriber object.
-                 * @since 2.7.40
-                 *
-                 */
-                $content = apply_filters('fluent_crm/email-design-template-visual_builder',
-                    $content,
-                    $templateData,
-                    $email->campaign,
-                    $email->subscriber
-                );
-            }
-
-            $footerText = '';
-        } else {
+        if ($email->campaign->design_template == 'visual_builder') {
             /**
-             * Determine the email design template for web preview in FluentCRM.
+             * Determine the email design template content in the visual builder in FluentCRM.
              *
              * @param string $emailBody The email body content.
              * @param array $templateData The template data.
-             * @param object $email ->campaign The email campaign object.
-             * @param object $email ->subscriber The email subscriber object.
-             *
-             * @return string The filtered email design template for web preview.
-             * @since 2.7.0
+             * @param object $email->campaign The email campaign object.
+             * @param object $email->subscriber The email subscriber object.
+             * @since 2.7.40
              *
              */
-            $content = apply_filters('fluent_crm/email-design-template-web_preview',
+            $content = apply_filters('fluent_crm/email-design-template-visual_builder',
                 $emailBody,
                 $templateData,
                 $email->campaign,
                 $email->subscriber
             );
+            $footerText = '';
+        } elseif ($email->campaign->design_template == 'raw_html') {
+            $content = $emailBody;
+            $footerText = '';
+        } else {
+            /**
+             * Apply the campaign design template for the web preview.
+             *
+             * Single render pass — passes the original parsed email body directly to the
+             * design template handler. No intermediate web_preview pass is applied, which
+             * prevented duplicate footers and double Emogrifier runs for block_editor,
+             * simple, plain, classic, and raw_classic templates.
+             *
+             * @param string $emailBody The original parsed email body content.
+             * @param array $templateData Template data including footer_config so filterTemplateData()
+             *                           applies custom footer styling and sanitization correctly.
+             * @param object $email->campaign The campaign object.
+             * @param object $subscriber The subscriber object.
+             * @since 2.8.40
+             *
+             */
+            $content = apply_filters(
+                'fluent_crm/email-design-template-' . $email->campaign->design_template,
+                $emailBody,
+                $templateData,
+                $email->campaign,
+                $subscriber
+            );
         }
-
-        if (Str::contains($content, ['{{crm', '##crm'])) {
-            $content = str_replace(['{{crm_global_email_footer}}', '{{crm_preheader_text}}'], ['', $preHeader], $content);
-            if (Str::contains($content, ['##crm.', '{{crm.'])) {
-                /**
-                 * Determine the Smartcode text content before it is parsed in FluentCRM.
-                 *
-                 * This filter allows you to modify the Smartcode text content before it is parsed.
-                 *
-                 * @param string $content The Smartcode text content to be parsed.
-                 * @param object $email ->subscriber The subscriber object associated with the email.
-                 * @since 2.7.0
-                 *
-                 */
-                $content = apply_filters('fluent_crm/parse_extended_crm_text', $content, $email->subscriber);
-            }
-        }
-
-
-        /**
-         * Determine the email design template content for various types in FluentCRM.
-         *
-         * This filter allows customization of the email design template content.
-         *
-         * @param string $content The email content.
-         * @param array $templateData The data used in the email template.
-         * @param object $campaign The campaign object.
-         * @param object $subscriber The subscriber object.
-         * @since 2.8.40
-         *
-         */
-        $content = apply_filters(
-            'fluent_crm/email-design-template-' . $email->campaign->design_template,
-            $content,
-            $templateData,
-            $email->campaign,
-            $subscriber
-        );
 
         $preViewUrl = site_url('?fluentcrm=1&route=email_preview&_e_hash=' . $email->email_hash);
         $content = str_replace(['##web_preview_url##', '{{crm_global_email_footer}}', '{{crm_preheader_text}}'], [$preViewUrl, $footerText, $preHeader], $content);

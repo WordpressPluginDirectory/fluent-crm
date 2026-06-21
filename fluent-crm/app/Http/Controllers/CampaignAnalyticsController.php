@@ -163,7 +163,9 @@ class CampaignAnalyticsController extends Controller
                     ->orderBy('id', 'DESC')
                     ->get()
                     ->pluck('order_id')
-                    ->map('intval')
+                    ->map(function ($orderId) {
+                        return intval($orderId);
+                    })
                     ->all();
             }
             return fluentCrmDb()->table('postmeta')
@@ -172,7 +174,9 @@ class CampaignAnalyticsController extends Controller
                 ->orderBy('meta_id', 'DESC')
                 ->get()
                 ->pluck('post_id')
-                ->map('intval')
+                ->map(function ($orderId) {
+                    return intval($orderId);
+                })
                 ->all();
         }
 
@@ -187,7 +191,9 @@ class CampaignAnalyticsController extends Controller
                 ->orderBy('meta_id', 'DESC')
                 ->get()
                 ->pluck('edd_order_id')
-                ->map('intval')
+                ->map(function ($orderId) {
+                    return intval($orderId);
+                })
                 ->all();
         }
 
@@ -198,7 +204,9 @@ class CampaignAnalyticsController extends Controller
                 ->orderBy('id', 'DESC')
                 ->get()
                 ->pluck('order_id')
-                ->map('intval')
+                ->map(function ($orderId) {
+                    return intval($orderId);
+                })
                 ->all();
         }
 

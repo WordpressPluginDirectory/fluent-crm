@@ -93,7 +93,7 @@ $contentFontCss = $sanitizeFontStack($content_font_family);
         outline: none;
         text-decoration: none;
         max-width: 100%;
-        display: block;
+        display: inline-block;
     }
 
     .fcPreviewText {
@@ -110,6 +110,7 @@ $contentFontCss = $sanitizeFontStack($content_font_family);
 
     a {
         text-decoration: underline;
+        display: inline-block;
     }
 
     p, a, li, td, blockquote {

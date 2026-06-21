@@ -4,7 +4,7 @@ Tags: email marketing, newsletter, crm, email newsletter, subscribers
 Requires at least: 5.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.1.0
+Stable tag: 3.1.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -260,6 +260,36 @@ You can report any security bugs found in the source code of FluentCRM plugins t
 10. Pro Integrations
 
 == Changelog ==
+
+= 3.1.6 (Date: June 21, 2026) =
+- Fix: Db index migration failed issue
+- Improvement: Added Support for months unit for wait times in automation.
+
+= 3.1.5 (Date: June 15, 2026) =
+- New: Added FluentCart checkout subscription opt-in for assigning lists, tags, and double opt-in from checkout.
+- New: Added global link color picker to the Gutenberg email editor.
+- New: Added CSV export for FluentCRM system logs / CRM logs with date range options.
+- New: Company quick-create flow in contact addition 
+- Improvement: Improved campaign email queue reliability with lock-first sender handling, safer stale email recovery, and loopback fallback.
+- Improvement: Improved campaign recipient processing progress UI.
+- Improvement: Improved CSP compatibility for public forms and email view-on-browser pages.
+- Fixed: Campaign recipient processing could skip contacts during large list chunking.
+- Fixed: RSS block rendering and feed item links in the email editor.
+- Fixed: ##web_preview_url## and other URL smartcode issues.
+- Fixed: Duplicate footer issue in email web preview.
+- Fixed: Email template footer disable persistence issue.
+- Fixed: Missing footer settings in the classic email editor.
+- Fixed: Missing subject and settings step in Gutenberg recurring campaign editor.
+- Fixed: Revenue re-sync issue in sent campaign reports.
+- Fixed: WooCommerce dashboard sales stats now support modern order stats and HPOS-friendly stores.
+- Fixed: Latest Posts block links now resolve original WP RSS Aggregator feed item URLs.
+- Fixed: Latest Posts block filtered URLs are validated before rendering.
+- Fixed: Add Media button issue in Companies Notes & Activities.
+- Fixed: Automation label contrast in Dark Mode.
+- Fixed: Automation label sync from the label dialog.
+- Fixed: Conditional blocks being selectable inside conditional child branches.
+- Fixed: Data cleanup delete flow interruption issue
+- Fixed: Emogrifier autoloader conflict with FluentCart.
 
 = 3.1.0 (Date: May 23, 2026) =
 - New: WordPress AI support added for WordPress 7.x.

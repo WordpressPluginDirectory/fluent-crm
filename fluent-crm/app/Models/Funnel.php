@@ -158,6 +158,38 @@ class Funnel extends Model
         return $this;
     }
 
+    /**
+     * Replace existing funnel labels with the provided label IDs.
+     *
+     * @param array|int $labelIds
+     * @return $this
+     */
+    public function syncLabels($labelIds)
+    {
+        if (!is_array($labelIds)) {
+            $labelIds = [$labelIds];
+        }
+
+        $existingLabelIds = TermRelation::where('object_id', $this->id)
+            ->where('object_type', __CLASS__)
+            ->pluck('term_id')
+            ->toArray();
+
+        $labelIds = array_unique(array_filter(array_map('intval', $labelIds)));
+        $labelsToDetach = array_diff($existingLabelIds, $labelIds);
+        $labelsToAttach = array_diff($labelIds, $existingLabelIds);
+
+        if (!empty($labelsToDetach)) {
+            $this->detachLabels($labelsToDetach);
+        }
+
+        if (!empty($labelsToAttach)) {
+            $this->attachLabels($labelsToAttach);
+        }
+
+        return $this;
+    }
+
     public function detachLabels($labelIds)
     {
         if (!is_array($labelIds)) {

@@ -9,6 +9,7 @@ use FluentCrm\App\Models\FunnelSubscriber;
 use FluentCrm\App\Models\Lists;
 use FluentCrm\App\Models\Subscriber;
 use FluentCrm\App\Models\Tag;
+use FluentCrm\App\Hooks\Handlers\Scheduler;
 use FluentCrm\App\Services\Reporting;
 use FluentCrm\Framework\Http\Request\Request;
 use FluentCrm\App\Models\CampaignUrlMetric;
@@ -582,6 +583,13 @@ class ReportingController extends Controller
 
     public function ping()
     {
+        // Browser-driven cron fallback: while an admin has any CRM page open,
+        // the app pings this endpoint ~every 50s. If Action Scheduler (and the
+        // WP-Cron fallback) have stalled, take over the every-minute email task
+        // here. No-ops in a single option read when scheduling is healthy, and
+        // is fully locked/throttled internally — safe across tabs and users.
+        Scheduler::maybeProcessFromBrowserPing();
+
         return [
             'message' => 'pong'
         ];

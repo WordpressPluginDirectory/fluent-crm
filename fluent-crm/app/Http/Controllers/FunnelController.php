@@ -1855,7 +1855,9 @@ class FunnelController extends Controller
         $labelIds = is_array($labelIds) ? array_map('intval', $labelIds) : [];
         $labelIds = array_unique(array_filter($labelIds));
 
-        if ($action == 'attach') {
+        if ($action == 'sync') {
+            $funnel->syncLabels($labelIds);
+        } elseif ($action == 'attach') {
             $funnel->attachLabels($labelIds);
         } else {
             $funnel->detachLabels($labelIds);

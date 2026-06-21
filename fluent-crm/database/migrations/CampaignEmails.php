@@ -83,10 +83,9 @@ class CampaignEmails
             }
 
             // Composite index for campaign-scoped queries: WHERE campaign_id = ? AND status = ?
-            if (!in_array($indexPrefix . 'cid_status', $indexNames)) {
-                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $wpdb->query("ALTER TABLE {$table} ADD INDEX `{$indexPrefix}cid_status` (`campaign_id`, `status`);");
-            }
+            // Owned by DbPerformanceService so the migration and the runtime index
+            // health-check / repair path share one definition.
+            \FluentCrm\App\Services\DbPerformanceService::ensureCriticalIndex($indexPrefix . 'cid_status');
 
             // Drop redundant single-column indexes now covered by composite indexes
             $redundantIndexes = [

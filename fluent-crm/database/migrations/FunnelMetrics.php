@@ -46,10 +46,8 @@ class FunnelMetrics
             // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $indexes = $wpdb->get_results("SHOW INDEX FROM $table");
             $indexedColumns = [];
-            $indexNames = [];
             foreach ($indexes as $index) {
                 $indexedColumns[] = $index->Column_name;
-                $indexNames[] = $index->Key_name;
             }
 
             if(!in_array('sequence_id', $indexedColumns)) {
@@ -60,24 +58,11 @@ class FunnelMetrics
                 $wpdb->query($indexSql);
             }
 
-            // Add composite unique index for idempotency enforcement
-            if (!in_array('funnel_seq_subscriber_unique', $indexNames)) {
-                // Delete duplicate rows first, keeping the latest entry per group
-                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $wpdb->query("DELETE fm FROM {$table} fm
-                    INNER JOIN (
-                        SELECT funnel_id, sequence_id, subscriber_id, MAX(id) AS keep_id
-                        FROM {$table}
-                        GROUP BY funnel_id, sequence_id, subscriber_id
-                        HAVING COUNT(*) > 1
-                    ) dups ON fm.funnel_id = dups.funnel_id
-                        AND fm.sequence_id = dups.sequence_id
-                        AND fm.subscriber_id = dups.subscriber_id
-                        AND fm.id != dups.keep_id");
-
-                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                $wpdb->query("ALTER TABLE {$table} ADD UNIQUE INDEX `funnel_seq_subscriber_unique` (`funnel_id`, `sequence_id`, `subscriber_id`)");
-            }
+            // Composite unique index for idempotency enforcement. The sweep +
+            // dedupe + ADD UNIQUE KEY convergence lives in one place —
+            // DbPerformanceService, shared with the runtime index health-check /
+            // repair path — so the two can never drift.
+            \FluentCrm\App\Services\DbPerformanceService::ensureCriticalIndex('funnel_seq_subscriber_unique');
         }
     }
 }

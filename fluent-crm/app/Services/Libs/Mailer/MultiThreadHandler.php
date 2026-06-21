@@ -81,8 +81,7 @@ class MultiThreadHandler extends BaseHandler
     {
         $this->calledFrom = Arr::get($_REQUEST, 'action') == 'fluentcrm-post-multi-thread-send-now' ? 'ajax' : 'cron';
 
-        fluentcrm_update_option($this->optionKey . '_last_called', time());
-
+        // Cheap guards first — in-process re-entrancy and the hard kill-switch.
         if (
             did_action('fluent_crm/sending_multi_threading_email') ||
             apply_filters('fluent_crm/disable_email_processing', false)
@@ -95,14 +94,6 @@ class MultiThreadHandler extends BaseHandler
             return false;
         }
 
-        if (!Helper::willMultiThreadEmail(300)) {
-            as_schedule_single_action(time() + 1, 'fluent_crm_cancel_multi_thread_mailing', [], 'fluent-crm', true);
-            return false;
-        }
-
-        $this->isMultiThread = true;
-        $this->startingTimeStamp = time();
-
         if (function_exists('set_time_limit')) {
             @set_time_limit($this->maximumProcessingTime + 30);
         }
@@ -113,7 +104,36 @@ class MultiThreadHandler extends BaseHandler
             $this->maximumProcessingTime = $systemMaxProcessingTime;
         }
 
+        // Acquire the lock before the willMultiThreadEmail() COUNT(*). The
+        // atomic lock is the authoritative guard against concurrent runners, so
+        // a losing racer bails here after a single atomic op instead of paying
+        // for the count query. (memoryExceeded above runs before this, so it
+        // has no lock to release.)
         if (!$this->acquireLock()) {
+            return false;
+        }
+
+        // The lock is now held, and handle() calls isSystemOk() OUTSIDE its
+        // try/catch. Guard every path below so a thrown error (the
+        // willMultiThreadEmail() count, the cancel scheduling, or the
+        // _last_called write) releases the lock instead of orphaning it until
+        // the ~80s TTL.
+        try {
+            if (!Helper::willMultiThreadEmail(300)) {
+                as_schedule_single_action(time() + 1, 'fluent_crm_cancel_multi_thread_mailing', [], 'fluent-crm', true);
+                $this->releaseLock();
+                return false;
+            }
+
+            // Record the start of an actual (lock-winning) send cycle.
+            // callBackGround() reads this to keep the loopback continuation alive.
+            fluentcrm_update_option($this->optionKey . '_last_called', time());
+
+            $this->isMultiThread = true;
+            $this->startingTimeStamp = time();
+        } catch (\Throwable $e) {
+            $this->releaseLock();
+            Helper::debugLog('isSystemOk post-lock failure at ' . $this->runnerTitle, $e->getMessage(), 'error');
             return false;
         }
 

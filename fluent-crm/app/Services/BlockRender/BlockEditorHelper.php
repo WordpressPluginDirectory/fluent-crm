@@ -345,7 +345,7 @@ class BlockEditorHelper
 
             'headings_color'   => '#202020', // matched
             'text_color'       => '#202020', // matched
-            'link_color'       => '', // not used now
+            'link_color'       => '#0693e3',
             'link_color_hover' => '', // not used now
 
             'paragraph_font_size'   => '16px', // matched

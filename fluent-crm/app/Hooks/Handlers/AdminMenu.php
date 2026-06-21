@@ -4,6 +4,7 @@ namespace FluentCrm\App\Hooks\Handlers;
 
 use FluentCrm\App\Models\Lists;
 use FluentCrm\App\Models\Tag;
+use FluentCrm\App\Services\DbPerformanceService;
 use FluentCrm\App\Services\Helper;
 use FluentCrm\App\Services\PermissionManager;
 use FluentCrm\App\Services\TransStrings;
@@ -734,6 +735,14 @@ class AdminMenu
             'contact_prefixes'                    => Helper::getContactPrefixes(),
             'contact_custom_fields'               => fluentcrm_get_custom_contact_fields(),
             'server_time'                         => current_time('mysql'),
+            // Only users who can manage settings can hit the repair endpoint
+            // (SettingsPolicy → fcrm_manage_settings), so only they get a real
+            // health signal. Everyone else gets `true` — and the health check is
+            // skipped via short-circuit — so the SPA never fires a repair the
+            // server would just reject. For permitted users this is a cheap
+            // cached read (one fc_meta option) on the happy path; when it is
+            // false, app.js fires a one-off background repair on boot.
+            'db_index_health_ok'                  => !PermissionManager::currentUserCan('fcrm_manage_settings') || !DbPerformanceService::hasBrokenIndex(false),
             'crm_pro_url'                         => 'https://fluentcrm.com/?utm_source=plugin&utm_medium=admin&utm_campaign=promo',
             /**
              * Determine if request verification is required in FluentCRM.

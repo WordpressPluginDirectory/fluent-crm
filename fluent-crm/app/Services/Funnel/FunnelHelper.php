@@ -358,15 +358,22 @@ class FunnelHelper
         }
 
         $unit = Arr::get($settings, 'wait_time_unit');
-        $converter = 86400; // default day
-        if ($unit == 'hours') {
-            $converter = 3600; // hour
-        } else if ($unit == 'minutes') {
-            $converter = 60;
-        }
+        $time = (int) Arr::get($settings, 'wait_time_amount');
 
-        $time = Arr::get($settings, 'wait_time_amount');
-        $delay = (int)$time * $converter;
+        if ($unit == 'months') {
+            // Months are not a fixed number of seconds, so anchor to the
+            // current time to get a calendar-accurate offset (e.g. +2 months).
+            $now = current_time('timestamp');
+            $delay = strtotime('+' . $time . ' months', $now) - $now;
+        } else {
+            $converter = 86400; // default day
+            if ($unit == 'hours') {
+                $converter = 3600; // hour
+            } else if ($unit == 'minutes') {
+                $converter = 60;
+            }
+            $delay = $time * $converter;
+        }
 
         if (!$delay || $delay < 1) {
             $delay = 1;
@@ -472,15 +479,22 @@ class FunnelHelper
         }
 
         $unit = Arr::get($settings, 'wait_time_unit');
-        $converter = 86400; // default day
-        if ($unit == 'hours') {
-            $converter = 3600; // hour
-        } else if ($unit == 'minutes') {
-            $converter = 60;
-        }
+        $time = (int) Arr::get($settings, 'wait_time_amount');
 
-        $time = Arr::get($settings, 'wait_time_amount');
-        $waitTimes = (int)$time * $converter;
+        if ($unit == 'months') {
+            // Months are not a fixed number of seconds, so anchor to the
+            // current time to get a calendar-accurate offset (e.g. +2 months).
+            $now = current_time('timestamp');
+            $waitTimes = strtotime('+' . $time . ' months', $now) - $now;
+        } else {
+            $converter = 86400; // default day
+            if ($unit == 'hours') {
+                $converter = 3600; // hour
+            } else if ($unit == 'minutes') {
+                $converter = 60;
+            }
+            $waitTimes = $time * $converter;
+        }
 
         if (!$waitTimes || $waitTimes < 1) {
             $waitTimes = 1;

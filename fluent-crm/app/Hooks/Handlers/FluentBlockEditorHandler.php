@@ -31,6 +31,8 @@ class FluentBlockEditorHandler
 
     public function register()
     {
+        add_filter('register_block_type_args', [$this, 'registerConditionalVisibilityAttributes'], 10, 2);
+
         add_action('init', function () {
             register_post_type('fcrm-dummy', [
                 'label'        => 'Email-Body',
@@ -176,6 +178,87 @@ class FluentBlockEditorHandler
                 'permission_callback' => $patternPermission
             ]);
         });
+    }
+
+    /**
+     * Register FluentCRM conditional visibility attributes in PHP.
+     *
+     * WordPress validates dynamic block attributes against the server-side
+     * block schema during render REST requests, so this also runs when the
+     * render request contains FluentCRM's conditional visibility attributes.
+     *
+     * @param array  $args Block registration arguments.
+     * @param string $name Block name.
+     * @return array
+     */
+    public function registerConditionalVisibilityAttributes($args, $name)
+    {
+        $shouldRegister = $this->shouldRegisterConditionalVisibilityAttributes();
+
+        if (!apply_filters('fluent_crm/block_editor_register_conditional_visibility_attributes', $shouldRegister, $name, $args)) {
+            return $args;
+        }
+
+        $skipBlocks = [
+            'fluentcrm/conditional-group',
+            'fluent-crm/conditional-content'
+        ];
+
+        if (in_array($name, $skipBlocks, true)) {
+            return $args;
+        }
+
+        if (!isset($args['attributes']) || !is_array($args['attributes'])) {
+            $args['attributes'] = [];
+        }
+
+        $attributes = apply_filters('fluent_crm/block_editor_conditional_visibility_attributes', [
+            'fcrmConditionType' => [
+                'type'    => 'string',
+                'default' => ''
+            ],
+            'fcrmTagIds'       => [
+                'type'    => 'array',
+                'default' => []
+            ]
+        ], $name, $args);
+
+        foreach ((array)$attributes as $attributeName => $attributeConfig) {
+            if (!isset($args['attributes'][$attributeName])) {
+                $args['attributes'][$attributeName] = $attributeConfig;
+            }
+        }
+
+        return $args;
+    }
+
+    /**
+     * Check if the current request needs FluentCRM conditional visibility
+     * attributes in server-side block schemas.
+     *
+     * @return bool
+     */
+    private function shouldRegisterConditionalVisibilityAttributes()
+    {
+        if (isset($_REQUEST['fluent_crm_block_editor'])) {
+            return true;
+        }
+
+        if (!isset($_REQUEST['attributes'])) {
+            return false;
+        }
+
+        $attributes = wp_unslash($_REQUEST['attributes']);
+
+        if (is_array($attributes)) {
+            return array_key_exists('fcrmConditionType', $attributes) || array_key_exists('fcrmTagIds', $attributes);
+        }
+
+        if (is_string($attributes)) {
+            return strpos($attributes, 'fcrmConditionType') !== false || strpos($attributes, 'fcrmTagIds') !== false;
+        }
+
+        return false;
     }
 
     /**

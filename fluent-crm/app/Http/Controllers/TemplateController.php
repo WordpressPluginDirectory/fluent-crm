@@ -56,21 +56,18 @@ class TemplateController extends Controller
                 $editType = 'html';
             }
 
+            $designTemplate = get_post_meta($template->ID, '_design_template', true);
             $templateConfig = get_post_meta($template->ID, '_template_config', true);
 
             if(!$templateConfig || !is_array($templateConfig)) {
                 $templateConfig = [];
             }
 
-            if (!isset($templateConfig['content_padding'])) {
-                $templateConfig['content_padding'] = 20;
-            }
-
             $footerSettings = get_post_meta($template->ID, '_footer_settings', true);
             $normalizedSettings = $this->normalizeTemplateSettings([
                 'template_config' => $templateConfig,
                 'footer_settings' => $footerSettings
-            ]);
+            ], $designTemplate);
 
             $templateData = [
                 'post_title'      => $template->post_title,
@@ -78,7 +75,7 @@ class TemplateController extends Controller
                 'post_excerpt'    => $template->post_excerpt,
                 'email_subject'   => get_post_meta($template->ID, '_email_subject', true),
                 'edit_type'       => $editType,
-                'design_template' => get_post_meta($template->ID, '_design_template', true),
+                'design_template' => $designTemplate,
                 'settings'        => $normalizedSettings
             ];
 
@@ -97,7 +94,7 @@ class TemplateController extends Controller
             $normalizedSettings = $this->normalizeTemplateSettings([
                 'template_config' => Helper::getTemplateConfig($defaultTemplate),
                 'footer_settings' => []
-            ]);
+            ], $defaultTemplate);
 
             $templateData = [
                 'post_title'      => '',
@@ -122,7 +119,14 @@ class TemplateController extends Controller
         }
 
         $templateData = Helper::parseArrayOrJson($this->request->get('template'));
-        $templateData['settings'] = $this->normalizeTemplateSettings(Arr::get($templateData, 'settings', []));
+
+        $designTemplate = Arr::get($templateData, 'design_template');
+        if (!$designTemplate) {
+            $designTemplate = Helper::getDefaultEmailTemplate();
+            $templateData['design_template'] = $designTemplate;
+        }
+
+        $templateData['settings'] = $this->normalizeTemplateSettings(Arr::get($templateData, 'settings', []), $designTemplate);
 
         $postData = Arr::only($templateData, [
             'post_title',
@@ -149,12 +153,6 @@ class TemplateController extends Controller
         $postData['post_type'] = fluentcrmTemplateCPTSlug();
 
         $templateId = wp_insert_post($postData);
-
-        $designTemplate = Arr::get($templateData, 'design_template');
-        if (!$designTemplate) {
-            $designTemplate = Helper::getDefaultEmailTemplate();
-            $templateData['design_template'] = $designTemplate;
-        }
 
         update_post_meta($templateId, '_email_subject', Arr::get($templateData, 'email_subject'));
         update_post_meta($templateId, '_edit_type', Arr::get($templateData, 'edit_type'));
@@ -222,7 +220,13 @@ class TemplateController extends Controller
         $oldTemplate = Template::findOrFail($id);
 
         $templateData = Helper::parseArrayOrJson($this->request->get('template'));
-        $templateData['settings'] = $this->normalizeTemplateSettings(Arr::get($templateData, 'settings', []));
+        $designTemplate = Arr::get($templateData, 'design_template');
+        if (!$designTemplate) {
+            $designTemplate = get_post_meta($id, '_design_template', true) ?: Helper::getDefaultEmailTemplate();
+            $templateData['design_template'] = $designTemplate;
+        }
+
+        $templateData['settings'] = $this->normalizeTemplateSettings(Arr::get($templateData, 'settings', []), $designTemplate);
 
         $footerSettings = Arr::get($templateData, 'settings.footer_settings');
         if($footerSettings) {
@@ -499,7 +503,7 @@ class TemplateController extends Controller
             $designTemplate = Helper::getDefaultEmailTemplate();
         }
 
-        $normalizedSettings = $this->normalizeTemplateSettings(Arr::get($templateData, 'settings', []));
+        $normalizedSettings = $this->normalizeTemplateSettings(Arr::get($templateData, 'settings', []), $designTemplate);
 
         return [
             'post_title'      => sanitize_text_field(Arr::get($templateData, 'post_title', '')),
@@ -519,14 +523,16 @@ class TemplateController extends Controller
      * @param array $settings
      * @return array
      */
-    protected function normalizeTemplateSettings($settings)
+    protected function normalizeTemplateSettings($settings, $designTemplate = '')
     {
         $templateConfig = Arr::get($settings, 'template_config', []);
         if (!is_array($templateConfig)) {
             $templateConfig = [];
         }
 
-        if (!isset($templateConfig['content_padding'])) {
+        if (!$this->templateSupportsContentPadding($designTemplate)) {
+            unset($templateConfig['content_padding']);
+        } elseif (!isset($templateConfig['content_padding'])) {
             $templateConfig['content_padding'] = 20;
         }
 
@@ -534,6 +540,10 @@ class TemplateController extends Controller
         if (!is_array($footerSettings)) {
             $footerSettings = [];
         }
+
+        $hasExplicitDisableFooter = array_key_exists('disable_footer', $footerSettings);
+        $hasExplicitCustomFooter = array_key_exists('custom_footer', $footerSettings);
+
         $disableFooter = Arr::get($footerSettings, 'disable_footer');
         if ($disableFooter !== 'yes' && $disableFooter !== 'no') {
             $legacyDisable = Arr::get($templateConfig, 'disable_footer');
@@ -567,6 +577,8 @@ class TemplateController extends Controller
         // Legacy imported templates may carry disable_footer in template_config without
         // explicit footer settings. Treat those as Global Footer instead of hidden footer.
         $isLegacyImportedDisabled = (
+            !$hasExplicitDisableFooter &&
+            !$hasExplicitCustomFooter &&
             $footerSettings['disable_footer'] === 'yes' &&
             Arr::get($templateConfig, 'disable_footer') === 'yes' &&
             $footerSettings['custom_footer'] !== 'yes' &&
@@ -585,6 +597,24 @@ class TemplateController extends Controller
             'template_config' => $templateConfig,
             'footer_settings' => $footerSettings
         ];
+    }
+
+    /**
+     * Raw classic editor templates only support font family and footer flags.
+     *
+     * @param string $designTemplate
+     * @return bool
+     */
+    protected function templateSupportsContentPadding($designTemplate)
+    {
+        if ($designTemplate === 'raw_classic') {
+            return false;
+        }
+
+        $templates = Helper::getEmailDesignTemplates();
+        $template = Arr::get($templates, $designTemplate, []);
+
+        return Arr::get($template, 'template_type') !== 'classic_editor';
     }
 
     /**
