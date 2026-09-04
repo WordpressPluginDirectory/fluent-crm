@@ -26,7 +26,7 @@ class Reporting
 
         $query = fluentCrmDb()->table('fc_subscribers')
             ->select($this->prepareSelect($frequency))
-            ->whereBetween('created_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
+            ->whereBetween('created_at', [$from->format('Y-m-d'), $to->format('Y-m-d 23:59:59')])
             ->where('status', 'subscribed');
 
         if ($tagId) {
@@ -66,7 +66,7 @@ class Reporting
 
         $query = fluentCrmDb()->table('fc_campaign_emails')
             ->select($this->prepareSelect($frequency, 'updated_at'))
-            ->whereBetween('updated_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
+            ->whereBetween('updated_at', [$from->format('Y-m-d'), $to->format('Y-m-d 23:59:59')])
             ->where('is_open', 1);
 
         if ($campaignId) {
@@ -92,7 +92,7 @@ class Reporting
 
         $query = fluentCrmDb()->table('fc_campaign_url_metrics')
             ->select($this->prepareSelect($frequency))
-            ->whereBetween('created_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
+            ->whereBetween('created_at', [$from->format('Y-m-d'), $to->format('Y-m-d 23:59:59')])
             ->where('type', 'click');
 
         if ($campaignId) {
@@ -118,7 +118,7 @@ class Reporting
 
         $query = fluentCrmDb()->table('fc_campaign_emails')
             ->select($this->prepareSelect($frequency, 'scheduled_at'))
-            ->whereBetween('scheduled_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
+            ->whereBetween('scheduled_at', [$from->format('Y-m-d'), $to->format('Y-m-d 23:59:59')])
             ->where('status', $status);
 
         if ($campaignId) {
@@ -144,7 +144,7 @@ class Reporting
 
         $items = fluentCrmDb()->table('fc_subscriber_meta')
             ->select($this->prepareSelect($frequency))
-            ->whereBetween('created_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
+            ->whereBetween('created_at', [$from->format('Y-m-d'), $to->format('Y-m-d 23:59:59')])
             ->where('key', 'unsubscribe_reason')
             ->groupBy($groupBy)
             ->orderBy($orderBy, 'ASC')
@@ -171,10 +171,26 @@ class Reporting
             ->distinct()
             ->count('subscriber_id');
 
+        /*
+         * COUNT per sequence is this query's primary output, so the two benchmark
+         * columns must be aggregated rather than added to the GROUP BY: grouping
+         * by them as well would split one sequence across several rows and make
+         * every count wrong. Selecting them unaggregated — as this did — is
+         * rejected outright under ONLY_FULL_GROUP_BY, which MySQL 8 enables by
+         * default, so the automation step report returned a 500 on most managed
+         * hosting.
+         *
+         * MAX() suits how both values are actually consumed below: benchmark_value
+         * is only tested for being greater than zero ("did this step earn
+         * anything"), and benchmark_currency only supplies a display label for the
+         * report. MAX(benchmark_value) answers the first question correctly even
+         * when only some rows in the group carry revenue, which the previous
+         * planner-chosen row did not.
+         */
         $items = FunnelMetric::select([
             'sequence_id',
-            'benchmark_currency',
-            'benchmark_value',
+            fluentCrmDb()->raw('MAX(benchmark_currency) AS benchmark_currency'),
+            fluentCrmDb()->raw('MAX(benchmark_value) AS benchmark_value'),
             fluentCrmDb()->raw('COUNT(sequence_id) AS count'),
         ])
             ->groupBy('sequence_id')
@@ -278,30 +294,24 @@ class Reporting
         $from = $this->makeFromDate($from);
         $to = $this->makeToDate($to);
 
-        $sent = fluentCrmDb()->table('fc_campaign_emails')
-            ->where('status', 'sent')
-            ->whereBetween('scheduled_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
-            ->count();
+        // One range scan with conditional aggregates instead of four separate ones.
+        $totals = fluentCrmDb()->table('fc_campaign_emails')
+            ->whereIn('status', ['sent', 'bounced'])
+            ->whereBetween('scheduled_at', [$from->format('Y-m-d'), $to->format('Y-m-d 23:59:59')])
+            ->select([
+                fluentCrmDb()->raw("SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent"),
+                fluentCrmDb()->raw("SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END) AS bounced"),
+                fluentCrmDb()->raw("SUM(CASE WHEN status = 'sent' AND is_open = 1 THEN 1 ELSE 0 END) AS opened"),
+                fluentCrmDb()->raw("SUM(CASE WHEN status = 'sent' AND click_counter > 0 THEN 1 ELSE 0 END) AS clicked"),
+            ])
+            ->first();
 
-        $bounced = fluentCrmDb()->table('fc_campaign_emails')
-            ->where('status', 'bounced')
-            ->whereBetween('scheduled_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
-            ->count();
+        $sent = $totals ? (int)$totals->sent : 0;
+        $bounced = $totals ? (int)$totals->bounced : 0;
+        $opened = $totals ? (int)$totals->opened : 0;
+        $clicked = $totals ? (int)$totals->clicked : 0;
 
         $delivered = max(0, $sent - $bounced);
-
-        $opened = fluentCrmDb()->table('fc_campaign_emails')
-            ->where('status', 'sent')
-            ->whereBetween('scheduled_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
-            ->where('is_open', 1)
-            ->count();
-
-        $clicked = fluentCrmDb()->table('fc_campaign_emails')
-            ->where('status', 'sent')
-            ->whereBetween('scheduled_at', [$from->format('Y-m-d'), $to->format('Y-m-d')])
-            ->whereNotNull('click_counter')
-            ->where('click_counter', '>', 0)
-            ->count();
 
         $deliveryBase = $sent + $bounced;
         $rateBase = $delivered;

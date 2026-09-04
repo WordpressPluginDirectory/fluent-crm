@@ -2,9 +2,9 @@
 Contributors: techjewel,adreastrian,heera,wpmanageninja
 Tags: email marketing, newsletter, crm, email newsletter, subscribers
 Requires at least: 5.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 3.1.6
+Stable tag: 3.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -260,6 +260,102 @@ You can report any security bugs found in the source code of FluentCRM plugins t
 10. Pro Integrations
 
 == Changelog ==
+
+= 3.2.0 (Date: September 03, 2026) =
+- New: Unified Messaging for SMS and WhatsApp, with one Inbox for contacts and new people.
+- New: Start a one-to-one SMS or WhatsApp conversation with any phone number, even before the person becomes a CRM contact.
+- New: Send Messaging campaigns to one-time recipients from a CSV file or pasted phone numbers.
+- New: Always-on receiving — any message sent to your business number lands in the CRM Inbox, whether or not the sender is a contact.
+- New: WhatsApp templates without leaving FluentCRM — create, manage and sync them in one place.
+- New: Reusable SMS message templates for faster, consistent replies and campaigns.
+- New: Receive WhatsApp images and documents in Inbox.
+- New: FluentCart Create Coupon automation action with coupon smartcode support.
+- New: Theme colors are now available in the email editor.
+- New: Media & Text block support in emails.
+- Improvement: Messaging rebuilt on a conversation-thread architecture — a solid foundation for upcoming channels and features.
+- Improvement: Messaging settings are now organized in one simpler tabbed screen.
+- Improvement: Ability to Select all contacts in a dynamic segment.
+- Improvement: Added replace/add/subtract modes to bulk custom field update
+- Improvement: Redesigned license screen with grace period and clearer status.
+- Improvement: Event tracking dates now follow the site date format.
+- Improvement: Tag and list names are length-checked before saving.
+- Improvement: Faster sending on large campaigns.
+- Improvement: Dark mode polish across inputs, buttons and admin screens.
+- Improvement: Non-subscribed contacts can be re-invited through opt-in forms and LMS integrations.
+- Improvement: Active WooCommerce subscriptions are now included on re-sync.
+- Improvement: WordPress version 7.1 compatible
+- Fixed: The fluent_crm/default_email_design_template filter not being applied to templates created from scratch.
+- Fixed: activity days-before contact filter
+- Fixed: The configured Default Contact Status is now honored for WooCommerce and EDD
+- Fixed: Heading font weight in email preview
+- Fixed: Raw HTML campaign content not saving in the editor.
+- Fixed: Campaign Archive shortcode parameters being ignored without ids
+- Fixed: Single Campaign archive rendering issue.
+- Fixed: Woo review smartcode responsive layout
+- Fixed: https:// being added to smartcode button links.
+- Fixed: Image links lost when replacing an image from the media library.
+- Fixed: Styling issues on the View in Browser email page.
+- Fixed: Outdated revenue showing after re-syncing a campaign report.
+- Fixed: Bounces from ToSend not being recorded.
+- Fixed: Incorrect advanced filter results for numeric contact custom fields.
+- Fixed: Phone numbers in local format being rejected.
+- Fixed: Tag search returning empty results when searching from page 2.
+- Fixed: Incorrect counts in automation step reports.
+- Fixed: Fatal error and incorrect campaign revenue totals on refunded WooCommerce orders.
+- Security Improvement: Strengthened permissions and safer handling for imports, exports, settings and external connections.
+- Security Improvement: Added safeguards against repeated subscription-link email requests.
+- Security Improvement: The "Change User Role" automation action now validates the target role's capabilities before applying it.
+- Security Improvement: SSL and safe Remote call enforced in some places.
+- Other Improvement & Bug Fixes
+
+= 3.1.13 (Date: August 24, 2026)
+- Internal Changes for Messaging Platforms Features
+- Route Policies Improvements for Roles and Permissions
+
+= 3.1.10 (Date: July 27, 2026) =
+- Improvement: Campaigns start sending immediately instead of waiting for the next cron tick.
+- Improvement: Multi-threaded email sending enabled by default.
+- Fixed: List and automation report counts on custom database table prefixes.
+
+= 3.1.9 (Date: July 27, 2026) =
+- New: Sticky notes in the automation editor, kept through export, import and duplication.
+- New: FluentCRM contact widget on the FluentCart customer page.
+- New: Empty / Not Empty operators for tags, lists and companies in advanced filters.
+- New: New MCP abilities for tags, lists and contact filters, plus batch contact lookups and automation enrollment data.
+- Improvement: Search, status filter and sortable columns in Sequence Subscribers.
+- Improvement: More paragraph font presets in the email editor.
+- Improvement: Email sending pipeline reworked for safe parallel workers — the queue is now partitioned by modulo (--modulo / --remainder replaces --offset in cli_send), with owner-token campaign locks and bulk recipient materialization.
+- Improvement: Weekly cleanup now clears stored email bodies for sent, cancelled and failed emails to free up database space.
+- Fixed: Gmail horizontal scrollbar on the Plain Left email design.
+- Fixed: Missing Order By options in the Latest Posts block.
+- Fixed: Test email address validation and campaign title uniqueness checks.
+- Security: Hardened permission checks and input handling for non-admin roles across contacts, notes, imports and webhooks.
+- Other Improvement & Bug Fixes
+
+= 3.1.8 (Date: June 30, 2026) =
+- Improvement: Email sending now respects the configured maximum sending cap.
+- Fixed: Abandon cart totals and provider-specific recovery notices.
+- Fixed: FluentCart abandon cart coupon fallback and built-in template smartcodes.
+- Fixed: LearnPress course completion tags not being applied with deprecated hooks.
+- Fixed: Reflected XSS issues in admin flows.
+
+= 3.1.7 (Date: June 25, 2026) = 
+= Improvement: Email Sending Cap Centralized
+- Improvement: Automation contact list table ui/ux synced with other tables
+- Improvement: Added Created At and Updated At sorting in the funnels table.
+- Fixed: FluentCart checkout subscription opt-in missing in modal checkout.
+- Fixed: FluentCart checkout opt-in selected lists showing IDs instead of names.
+- Fixed: FluentCart purchase history order links opening the wrong admin screen.
+- Fixed: WooCommerce single product email preview button text issue.
+- Fixed: Striped Gutenberg table style rendering issue in email
+- Fixed: Email design preset switch resetting global email styles.
+- Fixed: Contact growth report list and tag selector search issue.
+- Fixed: Email footer disabled state reset issue when using Send Email.
+- Fixed: Raw HTML template import not updating the campaign body editor.
+- Fixed: Sequence email action menu popover issue.
+- Fixed: Missing Contact Type field in CSV import mapping.
+- Fixed: Contact profile support section table layout issue.
+- Fixed: Gutenberg editor next button render issue in some cases
 
 = 3.1.6 (Date: June 21, 2026) =
 - Fix: Db index migration failed issue

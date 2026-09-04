@@ -20,7 +20,7 @@ class FunnelPolicy extends BasePolicy
      */
     public function verifyRequest(Request $request)
     {
-        if ($request->method() == 'GET') {
+        if ($this->requestMethod($request) == 'GET') {
             return $this->currentUserCan('fcrm_read_funnels');
         }
 
@@ -32,9 +32,23 @@ class FunnelPolicy extends BasePolicy
         return $this->currentUserCan('fcrm_delete_funnels');
     }
 
+    /**
+     * Exporting a funnel retains the historical administrator-only boundary.
+     *
+     * @param Request $request
+     * @return bool
+     */
+    public function exportFunnel(Request $request)
+    {
+        return $this->currentUserCan('manage_options');
+    }
+
     public function handleBulkAction(Request $request)
     {
-        if ($request->get('action_name') == 'delete_funnels') {
+        // Match the controller's normalization before selecting a capability.
+        $actionName = sanitize_text_field($request->get('action_name', ''));
+
+        if ($actionName == 'delete_funnels') {
             return $this->currentUserCan('fcrm_delete_funnels');
         }
 

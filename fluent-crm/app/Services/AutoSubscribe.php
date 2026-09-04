@@ -377,14 +377,22 @@ class AutoSubscribe
             return $defaults;
         }
 
-        return wp_parse_args($settings, $defaults);
+        $settings = wp_parse_args($settings, $defaults);
+
+        // Ensure target_list is always a string so it matches the string option
+        // values emitted by the _OptionSelector.vue component (String(option.id))
+        if ($settings['target_list']) {
+            $settings['target_list'] = (string) $settings['target_list'];
+        }
+
+        return $settings;
     }
 
     /**
      * Normalize and whitelist FluentCart checkout subscription settings before
      * persisting. Guards the stored option against malformed client payloads:
      * yes/no flags are forced to valid values, list/tag IDs are coerced to
-     * integers and the label is plain text.
+     * strings (validated as integer IDs) and the label is plain text.
      */
     public function sanitizeFluentCartCheckoutSettings($settings)
     {
@@ -404,7 +412,7 @@ class AutoSubscribe
             'status'         => $yesNo(Arr::get($settings, 'status')),
             'checkbox_label' => sanitize_text_field(Arr::get($settings, 'checkbox_label', '')),
             'auto_checked'   => $yesNo(Arr::get($settings, 'auto_checked')),
-            'target_list'    => $listId ? intval($listId) : '',
+            'target_list'    => $listId ? (string) intval($listId) : '',
             'show_only_new'  => $yesNo(Arr::get($settings, 'show_only_new'), 'yes'),
             'target_tags'    => array_values($tagIds),
             'double_optin'   => $yesNo(Arr::get($settings, 'double_optin'), 'yes')

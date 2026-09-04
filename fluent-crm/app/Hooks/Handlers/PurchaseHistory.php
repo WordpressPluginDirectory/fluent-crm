@@ -529,7 +529,7 @@ class PurchaseHistory
         if (!empty($data['purchased_products'])) {
             $body .= '<li><b>' . esc_html__("Purchased Products", "fluent-crm") . '</b><hr /><ul class="fc_list">';
             foreach ($data['purchased_products'] as $product) {
-                $body .= '<li><a target="_blank" rel="nofollow" href="' . $product->guid . '">' . $product->post_title . '</a></li>';
+                $body .= '<li><a target="_blank" rel="nofollow" href="' . esc_url($product->guid) . '">' . esc_html($product->post_title) . '</a></li>';
             }
             $body .= '</ul></li>';
         }

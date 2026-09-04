@@ -242,9 +242,11 @@ class PrefFormHandler
         $validKeys = array_keys($validInputs);
 
         $validData = Arr::only($_REQUEST, $validKeys);
-        if (empty($validData['email'])) {
-            $validData['email'] = $subscriber->email;
-        }
+
+        // The email field is display-only on this form. Never accept an email change from
+        // the raw POST: it would bypass the uniqueness check, the re-opt-in flow, and the
+        // email-changed hooks that handleManageSubPref enforces.
+        $validData['email'] = $subscriber->email;
 
         $errors = [];
         foreach ($validInputs as $key => $input) {
@@ -262,6 +264,19 @@ class PrefFormHandler
 
         if (!empty($validData['date_of_birth']) && !$this->isValidDate($validData['date_of_birth'])) {
             $errors[] = 'date_of_birth';
+        }
+
+        /*
+         * The loop above normalizes every enabled-but-unsubmitted field to '',
+         * which is right for the varchar columns but not for date_of_birth: that
+         * maps to a DATE column, where '' is rejected outright wherever
+         * STRICT_TRANS_TABLES is on (the MySQL 8 default) and silently stored as
+         * the sentinel '0000-00-00' everywhere else. Clearing an omitted optional
+         * date is the existing intent; NULL is how this column already expresses
+         * "unset", so clear to that instead.
+         */
+        if (array_key_exists('date_of_birth', $validData) && $validData['date_of_birth'] === '') {
+            $validData['date_of_birth'] = null;
         }
 
         if ($errors) {
@@ -373,8 +388,25 @@ class PrefFormHandler
             }
 
         } else {
-            $listIds = $subscriber->lists()->get()->pluck('id')->toArray();
-            $subscriber->detachLists($listIds);
+            // No `lists` in the payload means either the user unchecked every public list
+            // or the form rendered no lists field at all (pref_list_type = 'none').
+            // Only ever detach PUBLIC lists here — private/admin segmentation lists must
+            // survive a profile update, and a form without a lists field must not touch lists.
+            $publicLists = Helper::getPublicLists();
+
+            if ($publicLists) {
+                $publicListIds = [];
+                foreach ($publicLists as $publicList) {
+                    $publicListIds[] = $publicList->id;
+                }
+
+                $currentListIds = $subscriber->lists()->get()->pluck('id')->toArray();
+                $detachLists = array_values(array_intersect($currentListIds, $publicListIds));
+
+                if ($detachLists) {
+                    $subscriber->detachLists($detachLists);
+                }
+            }
         }
 
         do_action('fluent_crm/pref_form_self_contact_updated', $subscriber, $_REQUEST);

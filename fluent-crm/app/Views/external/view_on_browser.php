@@ -21,7 +21,12 @@ foreach ((array) $cssAssets as $cssIndex => $cssAsset) {
     wp_enqueue_style('fluentcrm_view_on_browser_' . $cssIndex, $cssAsset, [], null);
 }
 
-wp_enqueue_script('fluentcrm_dompurify', fluentCrmMix('libs/purify/purify.min.js'), [], FLUENTCRM_PLUGIN_VERSION, true);
+// DOMPurify ships from node_modules via the vite copy step, so the cache buster
+// is derived from the built file itself. A hardcoded version string would go
+// stale on a dependency bump and keep serving a cached, outdated sanitizer.
+$domPurifyAsset = FLUENTCRM_PLUGIN_PATH . 'assets/libs/purify/purify.min.js';
+$domPurifyVersion = file_exists($domPurifyAsset) ? (string) filemtime($domPurifyAsset) : FLUENTCRM_PLUGIN_VERSION;
+wp_enqueue_script('fluentcrm_dompurify', fluentCrmMix('libs/purify/purify.min.js'), [], $domPurifyVersion, true);
 
 // Normalize the body shape: callers pass either ['rendered' => $html] (success)
 // or a plain HTML string (error states). The renderer always expects `rendered`.
@@ -43,8 +48,8 @@ $fcEmailData = wp_json_encode(
 );
 wp_add_inline_script('fluentcrm_dompurify', 'window.fluentCrmEmail = ' . $fcEmailData . ';', 'before');
 
-// Renderer: sanitize the email body and mount it inside a closed shadow root so
-// its styles stay isolated from (and can't leak into) the surrounding page.
+// Renderer: sanitize the email document and mount it inside a closed shadow root
+// so its styles stay isolated from (and can't leak into) the surrounding page.
 // Runs after DOMPurify loads (default 'after' position).
 $fcViewOnBrowserScript = <<<'JS'
 (function () {
@@ -56,10 +61,100 @@ $fcViewOnBrowserScript = <<<'JS'
     if (!host || typeof host.attachShadow !== 'function' || typeof window.DOMPurify === 'undefined') {
         return;
     }
-    var clean = window.DOMPurify.sanitize(data.rendered, { ADD_TAGS: ['style'], ADD_ATTR: ['target'] });
+    var parseDocument = function (html) {
+        if (typeof window.DOMParser !== 'function') {
+            return null;
+        }
+        return (new window.DOMParser()).parseFromString(html || '', 'text/html');
+    };
+    var hasRel = function (link, relName) {
+        return (' ' + (link.getAttribute('rel') || '').toLowerCase() + ' ').indexOf(' ' + relName + ' ') !== -1;
+    };
+    var isSafeBunnyFontLink = function (link) {
+        var href = link.getAttribute('href') || '';
+        try {
+            var url = new URL(href, window.location.href);
+            if (url.protocol !== 'https:' || url.hostname !== 'fonts.bunny.net') {
+                return false;
+            }
+            return (hasRel(link, 'stylesheet') && url.pathname.indexOf('/css') === 0) || hasRel(link, 'preconnect');
+        } catch (e) {
+            return false;
+        }
+    };
+    var appendSafeFontLinks = function (sourceDocument) {
+        if (!sourceDocument || !sourceDocument.head) {
+            return;
+        }
+        Array.prototype.forEach.call(sourceDocument.head.querySelectorAll('link[href]'), function (link) {
+            if (!isSafeBunnyFontLink(link)) {
+                return;
+            }
+            var href = link.href;
+            var rel = hasRel(link, 'preconnect') ? 'preconnect' : 'stylesheet';
+            var alreadyLoaded = Array.prototype.some.call(
+                document.head.querySelectorAll('link[data-fcrm-web-preview-font]'),
+                function (existing) {
+                    return existing.href === href && existing.rel === rel;
+                }
+            );
+            if (alreadyLoaded) {
+                return;
+            }
+            var fontLink = document.createElement('link');
+            fontLink.setAttribute('data-fcrm-web-preview-font', '1');
+            fontLink.rel = rel;
+            fontLink.href = href;
+            if (link.hasAttribute('crossorigin')) {
+                fontLink.crossOrigin = 'anonymous';
+            }
+            document.head.appendChild(fontLink);
+        });
+    };
+    var appendHeadStyles = function (sourceRoot, target) {
+        var sourceHead = sourceRoot && sourceRoot.querySelector ? sourceRoot.querySelector('head') : null;
+        if (!sourceHead) {
+            return;
+        }
+        Array.prototype.forEach.call(sourceHead.querySelectorAll('style'), function (style) {
+            target.appendChild(style.cloneNode(true));
+        });
+    };
+    var appendBody = function (sourceRoot, target) {
+        var sourceBody = sourceRoot && sourceRoot.querySelector ? sourceRoot.querySelector('body') : null;
+        var body = document.createElement('body');
+        body.className = 'fcrm_email_document' + (sourceBody && sourceBody.className ? ' ' + sourceBody.className : '');
+        ['dir', 'lang', 'style'].forEach(function (attribute) {
+            if (sourceBody && sourceBody.hasAttribute(attribute)) {
+                body.setAttribute(attribute, sourceBody.getAttribute(attribute));
+            }
+        });
+        Array.prototype.forEach.call(sourceBody ? sourceBody.childNodes : [], function (child) {
+            body.appendChild(child.cloneNode(true));
+        });
+        target.appendChild(body);
+    };
+    appendSafeFontLinks(parseDocument(data.rendered));
+    var cleanRoot = window.DOMPurify.sanitize(data.rendered, {
+        WHOLE_DOCUMENT: true,
+        RETURN_DOM: true,
+        // svg/svgFilters are required: the Gutenberg social-icons block emits
+        // inline <svg> into the rendered email body (GutenbergEmailParser).
+        // mathMl is intentionally omitted — it never appears in email output.
+        USE_PROFILES: { html: true, svg: true, svgFilters: true },
+        ADD_TAGS: ['style'],
+        ADD_ATTR: ['target']
+    });
+    if (!cleanRoot || cleanRoot.nodeType !== 1 || !cleanRoot.querySelector) {
+        return;
+    }
     var shadow = host.attachShadow({ mode: 'closed' });
     var wrapper = document.createElement('div');
-    wrapper.innerHTML = clean;
+    var reset = document.createElement('style');
+    reset.textContent = 'body.fcrm_email_document{display:block;margin:0;}';
+    wrapper.appendChild(reset);
+    appendHeadStyles(cleanRoot, wrapper);
+    appendBody(cleanRoot, wrapper);
     shadow.appendChild(wrapper);
 })();
 JS;

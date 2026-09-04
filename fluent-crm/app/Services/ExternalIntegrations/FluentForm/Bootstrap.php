@@ -447,7 +447,7 @@ class Bootstrap extends IntegrationManagerController
                 $subscriber = $subscriber->updateStatus('subscribed');
             }
 
-            if ($subscriber->status == 'pending') {
+            if (Arr::isTrue($data, 'double_opt_in') && $subscriber->status != 'subscribed') {
                 $subscriber->sendDoubleOptinEmail();
             }
 
@@ -469,13 +469,15 @@ class Bootstrap extends IntegrationManagerController
 
             $hasDouBleOptIn = Arr::isTrue($data, 'double_opt_in');
 
-            $forceSubscribed = !$hasDouBleOptIn && ($subscriber->status != 'subscribed');
+            // Only the feed's explicit "force subscribe" setting may FORCE-overwrite a
+            // suppressed status (that's operator intent). A plain non-double-opt-in
+            // submission still requests 'subscribed' but non-forced: it promotes pending
+            // contacts, while updateOrCreate's guards keep unsubscribed/bounced contacts
+            // suppressed — anyone can type any email into a public form, so a bare
+            // submission is not proof of re-consent.
+            $forceSubscribed = Arr::isTrue($data, 'force_subscribe');
 
-            if (!$forceSubscribed) {
-                $forceSubscribed = Arr::isTrue($data, 'force_subscribe');
-            }
-
-            if ($forceSubscribed) {
+            if ($forceSubscribed || !$hasDouBleOptIn) {
                 $contact['status'] = 'subscribed';
             }
 
@@ -493,7 +495,10 @@ class Bootstrap extends IntegrationManagerController
                 $subscriber = $subscriber->updateStatus('subscribed');
             }
 
-            if ($hasDouBleOptIn && ($subscriber->status == 'pending' || $subscriber->status == 'unsubscribed')) {
+            // The submission itself is the re-consent trigger, so a double opt-in feed
+            // re-invites any non-subscribed contact (unsubscribed, bounced, …) without
+            // writing status — only the confirmation link makes them 'subscribed'.
+            if ($hasDouBleOptIn && $subscriber->status != 'subscribed') {
                 $subscriber->sendDoubleOptinEmail();
             }
 

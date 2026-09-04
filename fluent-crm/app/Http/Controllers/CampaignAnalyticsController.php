@@ -115,8 +115,27 @@ class CampaignAnalyticsController extends Controller
         }
 
         if (empty($revenueData['orderIds'])) {
+            // The currently-active sources hold no attributed orders, so the
+            // cached total is stale — typically a pre-orderIds legacy record
+            // whose orders were purged. The deletion-reversal path skips
+            // legacy records by design, so re-sync is the intentional
+            // clearing point. Caveat: if the plugin that recorded the revenue
+            // is deactivated, its orders are invisible here and the meta is
+            // cleared too; re-activating it and re-syncing rebuilds the
+            // record from the orders' _fc_cid meta.
+            if (fluentcrm_get_campaign_meta($campaignId, '_campaign_revenue')) {
+                fluentcrm_delete_campaign_meta($campaignId, '_campaign_revenue');
+
+                // `total` feeds the revenue widget (ViewCampaign.vue).
+                return [
+                    'message' => __('No attributed orders found. Stale revenue data has been cleared.', 'fluent-crm'),
+                    'total'   => number_format(0, 2)
+                ];
+            }
+
             return [
-                'message' => __('No order found to re-sync', 'fluent-crm')
+                'message' => __('No order found to re-sync', 'fluent-crm'),
+                'total'   => number_format(0, 2)
             ];
         }
 
@@ -475,8 +494,8 @@ class CampaignAnalyticsController extends Controller
             $contactsModel->searchBy($search);
         }
 
-        if ($orderBy = $request->getSafe('sort_by', 'sanitize_sql_orderby', 'id')) {
-            $orderType = $request->getSafe('sort_type', 'sanitize_sql_orderby', 'desc');
+        if ($orderBy = Helper::sanitizeOrderBy($request->get('sort_by'), 'id')) {
+            $orderType = Helper::sanitizeOrderBy($request->get('sort_type'), 'desc');
             $contactsModel->orderBy($orderBy, $orderType);
         }
 

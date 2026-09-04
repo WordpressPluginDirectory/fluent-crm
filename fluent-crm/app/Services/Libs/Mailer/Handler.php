@@ -56,7 +56,6 @@ class Handler extends BaseHandler
 
         try {
             $this->handleFailedLog();
-            $this->startedAt = microtime(true);
             $result = $this->processBatchEmails();
 
             if (is_wp_error($result)) {
@@ -72,7 +71,10 @@ class Handler extends BaseHandler
                 $this->logSentCount();
                 return true;
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            // \Throwable, not \Exception: a TypeError from a third-party filter
+            // in the render pipeline must still fall through to releaseLock()
+            // below, or the sender lock sits orphaned for its ~80s TTL.
             Helper::debugLog('Exception at Mailer::handle', $e->getMessage(), 'error');
         }
 
@@ -180,12 +182,13 @@ class Handler extends BaseHandler
         // if another handler somehow selects the same rows.
         $wpdb->query('START TRANSACTION');
 
-        $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT id FROM {$table} WHERE status IN ('pending', 'scheduled') AND scheduled_at <= %s ORDER BY scheduled_at ASC LIMIT %d FOR UPDATE",
-            $currentTime, $this->sendingPerChunk
-        ));
-
-        $ids = wp_list_pluck($rows, 'id');
+        // One locking SELECT per status — 'pending' first, then top up from
+        // 'scheduled'. See BaseHandler::lockClaimableIds() for why the two
+        // statuses must not share one IN() claim.
+        $ids = $this->lockClaimableIds('pending', $currentTime, $this->sendingPerChunk, 'ASC');
+        if (count($ids) < $this->sendingPerChunk) {
+            $ids = array_merge($ids, $this->lockClaimableIds('scheduled', $currentTime, $this->sendingPerChunk - count($ids), 'ASC'));
+        }
 
         if ($ids) {
             $idsPlaceholder = implode(',', array_fill(0, count($ids), '%d'));
@@ -263,7 +266,7 @@ class Handler extends BaseHandler
     public function sendDoubleOptInEmail($subscriber)
     {
         if ($subscriber->status == 'subscribed' || !$subscriber->email) {
-            return false; // already subscribed
+            return false; // already confirmed: nothing left to opt in to
         }
 
         $listIdOfSubscriber = Helper::latestListIdOfSubscriber($subscriber->id);
@@ -292,7 +295,12 @@ class Handler extends BaseHandler
             $emailPreHeader = apply_filters('fluent_crm/parse_campaign_email_text', $config['email_pre_header'], $subscriber);
         }
 
-        $url = site_url('?fluentcrm=1&route=confirmation&hash=' . $subscriber->hash . '&secure_hash=' . $subscriber->getSecureHash());
+        $url = add_query_arg([
+            FLUENTCRM_EXTERNAL_URL_PARAM => 1,
+            'route'                      => 'confirmation',
+            'hash'                       => $subscriber->hash,
+            'secure_hash'                => $subscriber->getSecureHash()
+        ], site_url('/'));
 
         $emailBody = apply_filters('fluent_crm/double_optin_email_body', $emailBody, $subscriber);
         $emailSubject = apply_filters('fluent_crm/double_optin_email_subject', $emailSubject, $subscriber);
@@ -332,7 +340,7 @@ class Handler extends BaseHandler
         ];
 
         Helper::maybeDisableEmojiOnEmail();
-        Mailer::send($data, $subscriber);
+        Mailer::send($data, $subscriber, null, true); // want to send without any rate-limiting checking
         return true;
     }
 
@@ -388,6 +396,11 @@ class Handler extends BaseHandler
      */
     public static function fireNonBlockingRequest($url, $body = [])
     {
+        // Test seam: allows suites to observe continuation intent without HTTP.
+        if (apply_filters('fluent_crm/intercept_loopback', false, $url, $body)) {
+            return;
+        }
+
         $timeout = max(1, (int)apply_filters('fluent_crm/non_blocking_request_timeout', 3, $url, $body));
         $connectTimeout = max(1, (int)apply_filters('fluent_crm/non_blocking_request_connect_timeout', 2, $url, $body));
 

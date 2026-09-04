@@ -42,7 +42,7 @@ class Reader extends AbstractCsv
      *
      * @return Iterator
      */
-    public function query(callable $callable = null)
+    public function query(?callable $callable = null)
     {
         return $this->fetch($callable);
     }
@@ -54,7 +54,7 @@ class Reader extends AbstractCsv
      *
      * @return Iterator
      */
-    public function fetch(callable $callable = null)
+    public function fetch(?callable $callable = null)
     {
         $this->addFilter(function ($row) {
             return is_array($row);
@@ -127,7 +127,7 @@ class Reader extends AbstractCsv
      *
      * @return array
      */
-    public function fetchAll(callable $callable = null)
+    public function fetchAll(?callable $callable = null)
     {
         return iterator_to_array($this->fetch($callable), false);
     }
@@ -144,7 +144,7 @@ class Reader extends AbstractCsv
      *
      * @return array
      */
-    public function fetchColumn($column_index = 0, callable $callable = null)
+    public function fetchColumn($column_index = 0, ?callable $callable = null)
     {
         if (false === filter_var($column_index, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]])) {
             throw new InvalidArgumentException(
@@ -179,7 +179,7 @@ class Reader extends AbstractCsv
      *
      * @return Iterator
      */
-    public function fetchAssoc($offset_or_keys = 0, callable $callable = null)
+    public function fetchAssoc($offset_or_keys = 0, ?callable $callable = null)
     {
         $keys = $this->getAssocKeys($offset_or_keys);
         $keys_count = count($keys);

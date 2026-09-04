@@ -39,8 +39,13 @@ class CampaignController extends Controller
         $order = strtoupper($request->get('sort_type', ''));
         $order = in_array($order, ['ASC', 'DESC'], true) ? $order : 'DESC';
 
-        $orderBy = sanitize_key($request->get('sort_by', ''));
-        $with = array_map('sanitize_key', $request->get('with', []));
+        $orderBy = Helper::sanitizeOrderBy($request->get('sort_by'), 'created_at');
+        // Re-key `with` to a flat, integer-indexed list and sanitize each value.
+        // Legitimate callers always send a plain list of names (e.g. with[]=stats);
+        // discarding any caller-supplied string keys closes the relation-name
+        // injection (a request shaped like with[<html>]=stats) without restricting
+        // which names are allowed, so no existing core/add-on caller is affected.
+        $with = array_values(array_map('sanitize_key', (array) $request->get('with', [])));
 
         $labels = $request->get('labels', []);
         $labels = is_array($labels) ? array_map('intval', $labels) : [];
@@ -53,7 +58,9 @@ class CampaignController extends Controller
         $campaignQuery = Campaign::when($status, function ($query) use ($status) {
             return $query->whereIn('status', $status);
         })->when($search, function ($query) use ($search) {
-            return $query->where('title', 'LIKE', "%$search%");
+            // Escape LIKE wildcards (%, _) so the term matches literally, not as wildcards.
+            global $wpdb;
+            return $query->where('title', 'LIKE', '%' . $wpdb->esc_like($search) . '%');
         })
             ->orderBy($orderBy, ($order == 'ASC') ? 'ASC' : 'DESC');
 
@@ -204,8 +211,15 @@ class CampaignController extends Controller
     {
         $title = $request->get('title');
         if ($title !== null && $title !== '') {
+            // Scope uniqueness to type='campaign'. fc_campaigns is a shared
+            // table: it also holds custom_email_campaign (one-off sends),
+            // funnel_email_campaign, sequence_mail and recurring_campaign rows,
+            // none of which are visible in the campaign list. An unscoped rule
+            // rejected a perfectly free title because some hidden row happened
+            // to hold it. This now matches ensureUniqueDefaultTitle() below and
+            // the MCP upsert-campaign check, which were both already scoped.
             $data = $this->validate($request->only('title'), [
-                'title' => 'required|unique:fc_campaigns',
+                'title' => 'required|unique:fc_campaigns,title,NULL,id,type,campaign',
             ]);
             $data['title'] = sanitize_text_field($data['title']);
         } else {
@@ -213,9 +227,23 @@ class CampaignController extends Controller
             $data['title'] = $this->ensureUniqueDefaultTitle($defaultTitle);
         }
 
+        // $useDefaultTemplate = sanitize_text_field($request->get('use_default_template', 'yes')) === 'yes';
+        // $defaultTemplate = $useDefaultTemplate ? Helper::getDefaultCampaignTemplate() : null;
+
+        // if (!$defaultTemplate && $designTemplate = sanitize_text_field($request->get('design_template', ''))) {
+        if ($designTemplate = sanitize_text_field($request->get('design_template', ''))) {
+            $data['design_template'] = $designTemplate;
+        }
+
         $campaign = Campaign::create($data)->load([
             'template', 'subjects'
         ]);
+
+        // if ($defaultTemplate) {
+        //     $campaign = Helper::applyTemplateToCampaign($campaign, $defaultTemplate)->load([
+        //         'template', 'subjects'
+        //     ]);
+        // }
 
         do_action('fluent_crm/campaign_created', $campaign);
 
@@ -248,7 +276,17 @@ class CampaignController extends Controller
             return $this->sendSuccess(['campaign' => $campaign, 'emails' => $emails]);
         }
 
-        $with = array_map('sanitize_key', $request->get('with', []));
+        // Re-key `with` to a flat, integer-indexed list and sanitize each value
+        // before it reaches Campaign::with(). The vulnerability was that a request
+        // shaped like with[<html>]=subjects put attacker input in the array KEY,
+        // which array_map('sanitize_key', ...) never touched, so it flowed into
+        // with() as a relation name and surfaced verbatim in the reflected
+        // "relationship not found" exception (XSS). Discarding keys with array_values
+        // closes that path, and sanitize_key keeps each value to [a-z0-9_-] so a
+        // value can't carry markup either. This keeps the exact value-sanitization the
+        // endpoint already had and does not restrict which relations are allowed, so
+        // no core/add-on caller is broken.
+        $with = array_values(array_map('sanitize_key', (array) $request->get('with', [])));
         if ($with) {
             $campaign = Campaign::with($with)->find($id);
         } else {
@@ -331,8 +369,10 @@ class CampaignController extends Controller
 
     public function update(Request $request, $id)
     {
+        // Same type scoping as create(): only other type='campaign' rows can
+        // conflict, and the campaign being edited is excluded by id.
         $data = $this->validate($this->request->except(['action']), [
-            "title" => "required|unique:fc_campaigns,title,{$id},id",
+            "title" => "required|unique:fc_campaigns,title,{$id},id,type,campaign",
         ]);
 
         $updateData = Arr::only($data, [
@@ -355,7 +395,9 @@ class CampaignController extends Controller
         if (!empty($data['settings'])) {
             $updateData['settings'] = $data['settings'];
 
-            if (!empty($data['settings']['template_config']['design_template'])) {
+            if (!empty($updateData['design_template']) && is_array($updateData['settings'])) {
+                $updateData['settings']['template_config']['design_template'] = $updateData['design_template'];
+            } else if (is_array($data['settings']) && !empty($data['settings']['template_config']['design_template'])) {
                 $updateData['design_template'] = $data['settings']['template_config']['design_template'];
             }
         }
@@ -705,7 +747,14 @@ class CampaignController extends Controller
 
                     $scheduleEndAt = sanitize_text_field($scheduleAt[1]);
 
-                    if ($scheduleEndAt && $scheduleEndAt && strtotime($scheduleStartAt) < strtotime($scheduleEndAt)) {
+                    // Both bounds must be present AND parseable. An empty/garbage start
+                    // date makes strtotime() return false (< any end), which previously
+                    // passed validation and produced a zero-date scheduled_at — turning
+                    // the range send into an instant blast under non-strict SQL modes.
+                    $scheduleStartTs = $scheduleStartAt ? strtotime($scheduleStartAt) : false;
+                    $scheduleEndTs = $scheduleEndAt ? strtotime($scheduleEndAt) : false;
+
+                    if ($scheduleStartTs && $scheduleEndTs && $scheduleStartTs < $scheduleEndTs) {
                         $isInvalid = false;
                     }
 
@@ -932,14 +981,28 @@ class CampaignController extends Controller
             }
         }
 
-        $email = $this->request->getSafe('email', 'sanitize_email', '');
+        $email = trim((string)$this->request->get('email', ''));
+
+        // Validate the raw value BEFORE any sanitizer runs: sanitizers silently strip
+        // illegal characters (tags, commas), which can turn malformed input — e.g. a
+        // comma-separated list — into a mangled-but-sendable address instead of an error.
+        if ($email && !is_email($email)) {
+            return $this->sendError([
+                'message' => __('Please provide a single valid email address to send the test email', 'fluent-crm')
+            ]);
+        }
+
+        $email = sanitize_email($email);
 
         if (!$email) {
             $user = get_user_by('ID', get_current_user_id());
             $email = $user->user_email;
         }
 
-        $emailBody = $campaignEmail->email_body;
+        // Materialized rows no longer carry a body snapshot (campaign bodies
+        // render from the campaign row at send time), so fall back to the
+        // campaign body when the queued row's copy is empty.
+        $emailBody = $campaignEmail->email_body ?: $campaign->email_body;
 
         $subscriber = Subscriber::where('email', $email)->first();
         if (!$subscriber) {
@@ -1070,7 +1133,7 @@ class CampaignController extends Controller
         ];
 
         Helper::maybeDisableEmojiOnEmail();
-        $result = Mailer::send($data, $subscriber);
+        $result = Mailer::send($data, $subscriber, null, true);
 
         return [
             'message' => sprintf(
@@ -1424,6 +1487,11 @@ class CampaignController extends Controller
             if (strtotime($campaign->scheduled_at) < strtotime(current_time('mysql'))) {
                 $campaign->status = 'working';
                 $campaign->save();
+
+                // A scheduled campaign has just come due while its screen is
+                // open. Fires once — the transition is guarded by the status
+                // write above, so the surrounding poll cannot repeat it.
+                \FluentCrm\App\Hooks\Handlers\Scheduler::fireSendNowRequest();
             }
         }
 
@@ -1505,9 +1573,11 @@ class CampaignController extends Controller
             // If there are still rows in processing, report that state and let the
             // scheduler-owned recovery path decide when it is safe to requeue them.
             if (!$processingCount && $sentCount) {
+                // 'scheduling' rows are mid-materialization — archiving while they exist
+                // would strand them (Scheduler.php treats them as future work too)
                 $futureCount = CampaignEmail::select('id')
                     ->where('campaign_id', $campaignId)
-                    ->whereIn('status', ['pending', 'scheduled', 'paused', 'processing', 'draft'])
+                    ->whereIn('status', ['pending', 'scheduled', 'paused', 'processing', 'draft', 'scheduling'])
                     ->count();
 
                 if (!$futureCount) {
@@ -1633,12 +1703,29 @@ class CampaignController extends Controller
         $campaign->status = 'working';
         $campaign->save();
 
+        // Keep each row's original scheduled_at so a range-scheduled campaign resumes
+        // its pacing instead of dumping every remaining recipient at once. Past-due
+        // rows are immediately claimable (senders take scheduled_at <= now); only
+        // rows with no schedule at all get stamped with the current time.
         CampaignEmail::where('campaign_id', $campaign->id)
             ->where('status', 'paused')
+            ->whereNotNull('scheduled_at')
+            ->update([
+                'status' => 'scheduled'
+            ]);
+
+        CampaignEmail::where('campaign_id', $campaign->id)
+            ->where('status', 'paused')
+            ->whereNull('scheduled_at')
             ->update([
                 'status'       => 'scheduled',
                 'scheduled_at' => current_time('mysql')
             ]);
+
+        // Past-due rows are claimable the moment the flip above commits, so
+        // start a sending cycle now rather than leaving the user watching an
+        // idle "working" campaign until the next scheduler tick.
+        \FluentCrm\App\Hooks\Handlers\Scheduler::fireSendNowRequest();
 
         return [
             'message'  => __('Campaign has been successfully resumed', 'fluent-crm'),
@@ -1654,7 +1741,11 @@ class CampaignController extends Controller
 
         if ($campaign->status == 'scheduled') {
             $newTime = $request->get('scheduled_at');
-            if ($newTime != $campaign->scheduled_at) {
+            // Only treat this as a reschedule when the client explicitly sent a valid
+            // new time. A title-only payload (the editor screen) reads NULL here —
+            // writing it through would null the schedule on the campaign and every
+            // queued email row, and the campaign would silently never send.
+            if ($newTime && strtotime($newTime) && $newTime != $campaign->scheduled_at) {
                 $campaign->scheduled_at = $newTime;
                 $campaign->save();
                 CampaignEmail::where('campaign_id', $campaign->id)

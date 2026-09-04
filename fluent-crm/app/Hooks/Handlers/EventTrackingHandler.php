@@ -58,6 +58,10 @@ class EventTrackingHandler
     public function applyEventTrackingFilter($query, $filters)
     {
         if (!Helper::isExperimentalEnabled('event_tracking')) {
+            // Fail closed: with event tracking switched off a saved "did event X" segment
+            // must match nobody. Returning the query unchanged would silently turn it
+            // into "all subscribers" for list views and campaign sends.
+            $query->whereRaw('1 = 0');
             return $query;
         }
 
@@ -98,11 +102,13 @@ class EventTrackingHandler
                     });
                 } else if ($operator == 'contains') {
                     $query->whereHas($relation, function ($q) use ($filter) {
-                        $q->where('title', 'LIKE', '%' . $filter['value'] . '%');
+                        global $wpdb;
+                        $q->where('title', 'LIKE', '%' . $wpdb->esc_like($filter['value']) . '%');
                     });
                 } else if ($operator == 'not_contains') {
                     $query->whereDoesntHave($relation, function ($q) use ($filter) {
-                        $q->where('title', 'LIKE', '%' . $filter['value'] . '%');
+                        global $wpdb;
+                        $q->where('title', 'LIKE', '%' . $wpdb->esc_like($filter['value']) . '%');
                     });
                 }
                 continue;
@@ -135,12 +141,14 @@ class EventTrackingHandler
                     });
                 } else if ($operator == 'contains') {
                     $query->whereHas($relation, function ($q) use ($filter, $eventKey) {
-                        $q->where('value', 'LIKE', '%' . $filter['value'] . '%')
+                        global $wpdb;
+                        $q->where('value', 'LIKE', '%' . $wpdb->esc_like($filter['value']) . '%')
                             ->where('event_key', $eventKey);
                     });
                 } else if ($operator == 'not_contains') {
                     $query->whereDoesntHave($relation, function ($q) use ($filter, $eventKey) {
-                        $q->where('value', 'LIKE', '%' . $filter['value'] . '%')
+                        global $wpdb;
+                        $q->where('value', 'LIKE', '%' . $wpdb->esc_like($filter['value']) . '%')
                             ->where('event_key', $eventKey);
                     });
                 }
@@ -209,7 +217,7 @@ class EventTrackingHandler
             }
             $html .= '<div class="fcrm_event_tracking_footer">';
             $html .= '<div class="fcrm_event_tracking_badge">' . esc_attr($event->event_key) . '<span class="fcrm_event_tracking_count">(' . esc_html($event->counter) . ')</span></div>';
-            $html .= '<span class="fcrm_event_tracking_date">' . $event->updated_at . '</span>';
+            $html .= '<span class="fcrm_event_tracking_date">' . esc_html(Helper::formatDateTime($event->updated_at)) . '</span>';
             $html .= '</div>';
             $html .= '</li>';
         }

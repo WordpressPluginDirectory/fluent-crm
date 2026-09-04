@@ -422,7 +422,12 @@ class GutenbergEmailParser
         $css = '<style type="text/css">';
 
         foreach ($this->inlineStyles as $selector => $styles) {
-            $css .= $selector . ' { ';
+            $cssSelector = $selector;
+            if (strpos($selector, '#') === 0 && strpos($selector, ',') === false) {
+                $cssSelector .= ', #templateBody ' . $selector;
+            }
+
+            $css .= $cssSelector . ' { ';
             foreach ($styles as $property => $value) {
                 $css .= $property . ': ' . $value . '; ';
             }
@@ -507,13 +512,12 @@ class GutenbergEmailParser
      */
     private function renderBlock($block, $isNested = false)
     {
-        $isInvisible = isset($block['attrs']['metadata']['blockVisibility']) && $block['attrs']['metadata']['blockVisibility'] === false;
-        if ($isInvisible) {
+        $attrs = $block['attrs'] ?? [];
+        if ($this->shouldOmitBlockFromEmail($attrs)) {
             return '';
         }
 
         $blockName = $block['blockName'];
-        $attrs = $block['attrs'] ?? [];
         $innerHTML = $block['innerHTML'] ?? '';
         $innerBlocks = $block['innerBlocks'] ?? [];
 
@@ -530,6 +534,7 @@ class GutenbergEmailParser
 
         $attrs['elem_id'] = $elementId;
         $attrs['is_root'] = !$isNested;
+        $attrs['fcrmVisibilityClasses'] = $this->getBlockViewportVisibilityClasses($attrs);
 
         // For blocks with innerContent array, reconstruct innerHTML
         if (empty($innerHTML) && !empty($block['innerContent'])) {
@@ -582,6 +587,9 @@ class GutenbergEmailParser
 
             case 'core/row':
                 return $this->renderRow($innerBlocks, $attrs, $innerHTML);
+
+            case 'core/media-text':
+                return $this->renderMediaText($innerBlocks, $attrs, $innerHTML);
 
             case 'core/table': // done
                 return $this->renderTable($innerHTML, $attrs);
@@ -766,7 +774,7 @@ class GutenbergEmailParser
             $listItems = '';
             foreach ($innerBlocks as $block) {
                 if ($block['blockName'] === 'core/list-item') {
-                    $listItems .= $this->renderListItem($block['innerHTML'], $block['attrs'] ?? []);
+                    $listItems .= $this->renderListItem($this->buildListItemContent($block), $block['attrs'] ?? []);
                 }
             }
         }
@@ -800,6 +808,10 @@ class GutenbergEmailParser
     private function renderListItem($content, $attrs)
     {
         if (!$this->checkBlockConditionVisibility($attrs)) {
+            return '';
+        }
+
+        if ($this->shouldOmitBlockFromEmail($attrs)) {
             return '';
         }
 
@@ -841,32 +853,137 @@ class GutenbergEmailParser
             $fontFamilyValue = $this->resolveFontFamilyValue($matches[1]);
         }
 
-        if (!$fontSizeValue && !$fontFamilyValue) {
-            return $content;
+        $visibilityClasses = $this->getBlockViewportVisibilityClasses($attrs);
+        if ($visibilityClasses) {
+            $classAttr = implode(' ', array_map('sanitize_html_class', $visibilityClasses));
+            $content = preg_replace_callback('/<li\b([^>]*)>/i', function ($matches) use ($classAttr) {
+                $attrs = $matches[1];
+                if (preg_match('/\sclass=(["\'])(.*?)\1/i', $attrs, $classMatch)) {
+                    $classes = trim($classMatch[2] . ' ' . $classAttr);
+                    return str_replace($classMatch[0], ' class="' . esc_attr($classes) . '"', $matches[0]);
+                }
+
+                return '<li' . $attrs . ' class="' . esc_attr($classAttr) . '">';
+            }, $content, 1);
         }
 
-        // Ensure list item typography is inline for email clients.
-        $content = preg_replace_callback('/<li\b([^>]*)>/i', function ($matches) use ($fontSizeValue, $fontFamilyValue) {
-            $attrs = $matches[1];
-            $styleParts = [];
-            if ($fontSizeValue) {
-                $styleParts[] = 'font-size:' . $fontSizeValue;
-            }
-            if ($fontFamilyValue) {
-                $styleParts[] = 'font-family:' . $fontFamilyValue;
-            }
-            $appendedStyles = implode(';', $styleParts);
+        if ($fontSizeValue || $fontFamilyValue) {
+            // Ensure list item typography is inline for email clients.
+            $content = preg_replace_callback('/<li\b([^>]*)>/i', function ($matches) use ($fontSizeValue, $fontFamilyValue) {
+                $attrs = $matches[1];
+                $styleParts = [];
+                if ($fontSizeValue) {
+                    $styleParts[] = 'font-size:' . $fontSizeValue;
+                }
+                if ($fontFamilyValue) {
+                    $styleParts[] = 'font-family:' . $fontFamilyValue;
+                }
+                $appendedStyles = implode(';', $styleParts);
 
-            if (preg_match('/\sstyle=(["\'])(.*?)\1/i', $attrs, $styleMatch)) {
-                $existingStyle = rtrim(trim($styleMatch[2]), ';');
-                $updatedStyle = $existingStyle . ';' . $appendedStyles;
-                return str_replace($styleMatch[0], ' style="' . esc_attr($updatedStyle) . '"', $matches[0]);
+                if (preg_match('/\sstyle=(["\'])(.*?)\1/i', $attrs, $styleMatch)) {
+                    $existingStyle = rtrim(trim($styleMatch[2]), ';');
+                    $updatedStyle = $existingStyle . ';' . $appendedStyles;
+                    return str_replace($styleMatch[0], ' style="' . esc_attr($updatedStyle) . '"', $matches[0]);
+                }
+
+                return '<li' . $attrs . ' style="' . esc_attr($appendedStyles) . '">';
+            }, $content, 1);
+        }
+
+        return $this->wrapDesktopHiddenForMso($content, $visibilityClasses);
+    }
+
+    /**
+     * Build a list item's inner HTML, re-inserting nested list blocks.
+     *
+     * The block parser strips nested core/list blocks out of a list item's
+     * innerHTML, leaving null placeholders in innerContent. Without this
+     * reconstruction, every nested list level is lost from the sent email.
+     *
+     * @param array $block Parsed core/list-item block.
+     * @return string
+     */
+    private function buildListItemContent($block)
+    {
+        $innerBlocks = $block['innerBlocks'] ?? [];
+        $innerContent = $block['innerContent'] ?? [];
+
+        if (empty($innerBlocks) || empty($innerContent)) {
+            return $block['innerHTML'] ?? '';
+        }
+
+        $content = '';
+        $blockIndex = 0;
+        foreach ($innerContent as $chunk) {
+            if (is_string($chunk)) {
+                $content .= $chunk;
+                continue;
             }
 
-            return '<li' . $attrs . ' style="' . esc_attr($appendedStyles) . '">';
-        }, $content, 1);
+            // A null chunk marks the position of the next inner block.
+            $innerBlock = isset($innerBlocks[$blockIndex]) ? $innerBlocks[$blockIndex] : null;
+            $blockIndex++;
+
+            if ($innerBlock && $innerBlock['blockName'] === 'core/list') {
+                $content .= $this->renderNestedList($innerBlock);
+            }
+        }
 
         return $content;
+    }
+
+    /**
+     * Render a nested list as a bare <ul>/<ol>, without the table wrapper
+     * used for root-level lists (a table is not valid inside an <li>).
+     *
+     * @param array $listBlock Parsed core/list block nested inside a list item.
+     * @return string
+     */
+    private function renderNestedList($listBlock)
+    {
+        $attrs = $listBlock['attrs'] ?? [];
+
+        if (!$this->checkBlockConditionVisibility($attrs)) {
+            return '';
+        }
+
+        // Nested lists never pass through renderBlock(), so the shared visibility
+        // checks have to be applied here as well as on root-level lists.
+        if ($this->shouldOmitBlockFromEmail($attrs)) {
+            return '';
+        }
+
+        $visibilityClasses = $this->getBlockViewportVisibilityClasses($attrs);
+
+        $tag = !empty($attrs['ordered']) ? 'ol' : 'ul';
+
+        $listItems = '';
+        foreach (($listBlock['innerBlocks'] ?? []) as $item) {
+            if ($item['blockName'] === 'core/list-item') {
+                $listItems .= $this->renderListItem($this->buildListItemContent($item), $item['attrs'] ?? []);
+            }
+        }
+
+        if (!$listItems) {
+            return '';
+        }
+
+        $classes = ['fc_list_item'];
+        if ($attrsClass = trim((string)Arr::get($attrs, 'className', ''))) {
+            $classes = array_merge($classes, preg_split('/\s+/', $attrsClass));
+        }
+        if (preg_match('/<' . $tag . '[^>]*class=["\']([^"\']+)["\']/i', (string)($listBlock['innerHTML'] ?? ''), $matches)) {
+            $classes = array_merge($classes, preg_split('/\s+/', trim((string)$matches[1])));
+        }
+        if ($visibilityClasses) {
+            $classes = array_merge($classes, array_map('sanitize_html_class', $visibilityClasses));
+        }
+        $classAttr = implode(' ', array_filter(array_unique($classes)));
+
+        return $this->wrapDesktopHiddenForMso(
+            "<{$tag} class='{$classAttr}'>{$listItems}</{$tag}>",
+            $visibilityClasses
+        );
     }
 
     /**
@@ -1135,7 +1252,7 @@ class GutenbergEmailParser
         unset($attrs['elem_id']);
 
         $innerHtml = <<<HTML
-        <table role="presentation" style="$tableStyles" align="$textAlign" class="fc_buttons_wrap" width="100%" cellspacing="0" cellpadding="0" border="0"><td id="$elementId" class="fc_buttons_inner">
+        <table role="presentation" style="$tableStyles" align="$textAlign" class="fc_buttons_wrap" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td id="$elementId" class="fc_buttons_inner">
         HTML;
 
 
@@ -1181,6 +1298,10 @@ class GutenbergEmailParser
             return '';
         }
 
+        if ($this->shouldOmitBlockFromEmail($attrs)) {
+            return '';
+        }
+
         // Extract URL and text from content
         $url = '#';
         $text = '';
@@ -1221,7 +1342,14 @@ class GutenbergEmailParser
             $class .= ' ' . $className;
         }
 
-        return "<a class='" . esc_attr($class) . "' id=\"" . esc_attr($elementId) . "\" style='" . esc_attr($styles) . "' href=\"" . $this->escapeButtonUrl($url) . "\">" . esc_html($text) . "</a>";
+        $visibilityClasses = $this->getBlockViewportVisibilityClasses($attrs);
+        if ($visibilityClasses) {
+            $class .= ' ' . implode(' ', array_map('sanitize_html_class', $visibilityClasses));
+        }
+
+        $html = "<a class='" . esc_attr($class) . "' id=\"" . esc_attr($elementId) . "\" style='" . esc_attr($styles) . "' href=\"" . $this->escapeButtonUrl($url) . "\">" . esc_html($text) . "</a>";
+
+        return $this->wrapDesktopHiddenForMso($html, $visibilityClasses);
     }
 
     /**
@@ -1288,7 +1416,31 @@ class GutenbergEmailParser
             }
         }
 
-        $buttonAttrs = $this->getFirstButtonBlockAttrs($block);
+        $buttonBlock = $this->getFirstButtonBlock($block);
+        $buttonAttrs = Arr::get($buttonBlock, 'attrs', []);
+        $buttonInnerHTML = Arr::get($buttonBlock, 'innerHTML', '');
+
+        if (!empty($buttonInnerHTML)) {
+            if (preg_match('/<a[^>]*href=["\']([^"\']+)["\'][^>]*>/i', $buttonInnerHTML, $urlMatch)) {
+                $buttonUrl = $urlMatch[1];
+            }
+
+            if (preg_match('/<a[^>]*>(.*?)<\/a>/is', $buttonInnerHTML, $textMatch)) {
+                $parsedText = trim(wp_strip_all_tags($textMatch[1]));
+                if ($parsedText) {
+                    $buttonText = $parsedText;
+                }
+            }
+        }
+
+        if (!empty($buttonAttrs['url'])) {
+            $buttonUrl = $buttonAttrs['url'];
+        }
+
+        if (!empty($buttonAttrs['text'])) {
+            $buttonText = $buttonAttrs['text'];
+        }
+
         $buttonElementId = uniqid('block-', false);
         $buttonAttrs['elem_id'] = $buttonElementId;
 
@@ -1317,20 +1469,20 @@ class GutenbergEmailParser
     }
 
     /**
-     * Find the first nested Gutenberg button attrs inside product blocks.
+     * Find the first nested Gutenberg button block inside product blocks.
      */
-    private function getFirstButtonBlockAttrs($block)
+    private function getFirstButtonBlock($block)
     {
         $innerBlocks = Arr::get($block, 'innerBlocks', []);
 
         foreach ($innerBlocks as $innerBlock) {
             if (Arr::get($innerBlock, 'blockName') === 'core/button') {
-                return Arr::get($innerBlock, 'attrs', []);
+                return $innerBlock;
             }
 
-            $buttonAttrs = $this->getFirstButtonBlockAttrs($innerBlock);
-            if ($buttonAttrs) {
-                return $buttonAttrs;
+            $buttonBlock = $this->getFirstButtonBlock($innerBlock);
+            if ($buttonBlock) {
+                return $buttonBlock;
             }
         }
 
@@ -1368,20 +1520,20 @@ class GutenbergEmailParser
             }
         }
 
-        $buttonStyles = [];
-        $buttonColor = isset($attrs['buttonColor']) && $attrs['buttonColor'] !== '' ? $attrs['buttonColor'] : '#ffffff';
-        if (!empty($buttonColor)) {
-            $buttonStyles[] = 'color:' . sanitize_text_field($buttonColor);
-        }
-        if (!empty($attrs['buttonBG'])) {
-            $buttonStyles[] = 'background:' . sanitize_text_field($attrs['buttonBG']);
-        }
-        $buttonStyles[] = 'text-decoration:none';
-        $buttonStyles[] = 'display:inline-block';
-        $buttonStyles[] = 'padding:12px 18px';
-        $buttonStyles[] = 'border-radius:4px';
+        $buttonAttrs = Arr::get($this->getFirstButtonBlock($block), 'attrs', []);
+        $buttonElementId = uniqid('block-', false);
+        $buttonAttrs['elem_id'] = $buttonElementId;
 
-        $buttonHtml = '<a href="' . esc_url($buttonUrl) . '" style="' . esc_attr(implode(';', $buttonStyles) . ';') . '">' . esc_html($buttonText) . '</a>';
+        $buttonHtml = $this->renderButton(
+            '<a href="' . esc_url($buttonUrl) . '">' . esc_html($buttonText) . '</a>',
+            $buttonAttrs
+        );
+
+        if (!$buttonHtml) {
+            $buttonHtml = '<a href="' . esc_url($buttonUrl) . '">' . esc_html($buttonText) . '</a>';
+        } else {
+            $this->collectInlineStyles($buttonElementId, $buttonAttrs, 'core/button');
+        }
 
         $html = CartProduct::renderProduct($buttonHtml, [
             'blockName' => 'fluent-crm/cart-product',
@@ -1537,7 +1689,24 @@ class GutenbergEmailParser
             return '';
         }
 
-        return $this->renderBlocks($blocks, $nested);
+        $html = $this->renderBlocks($blocks, $nested);
+
+        // A synced pattern renders as a bare list of blocks, so the pattern's own
+        // responsive visibility has no element to live on. Give it an email-safe
+        // carrier table only when hiding is actually configured, so untouched
+        // patterns keep their existing markup. wrapInTable() applies the classes
+        // and the desktop MSO guard the same way it does for root blocks.
+        $visibilityClasses = array_filter((array)Arr::get($attrs, 'fcrmVisibilityClasses', []));
+        if (!$visibilityClasses || trim($html) === '') {
+            return $html;
+        }
+
+        // is_root stays false so the wrapper never repeats the root column
+        // padding already applied by the pattern's own inner blocks.
+        return $this->wrapInTable($html, [
+            'fcrmVisibilityClasses' => $visibilityClasses,
+            'is_root'               => false,
+        ]);
     }
 
     private function renderCodeBlock($innerHTML, $attrs)
@@ -1715,6 +1884,45 @@ class GutenbergEmailParser
     }
 
     /**
+     * WordPress block visibility uses false for full omission and a viewport
+     * object for responsive hiding. Only the false scalar removes email markup.
+     */
+    private function shouldOmitBlockFromEmail($attrs)
+    {
+        return Arr::get((array)$attrs, 'metadata.blockVisibility') === false;
+    }
+
+    /**
+     * Convert WordPress viewport visibility metadata to FluentCRM email classes.
+     *
+     * @param array $attrs Parsed Gutenberg block attributes.
+     * @return string[]
+     */
+    private function getBlockViewportVisibilityClasses($attrs)
+    {
+        $viewport = Arr::get((array)$attrs, 'metadata.blockVisibility.viewport', []);
+
+        if (!is_array($viewport)) {
+            return [];
+        }
+
+        $classMap = [
+            'mobile'  => 'fcrm_hide_on_mobile',
+            'tablet'  => 'fcrm_hide_on_tablet',
+            'desktop' => 'fcrm_hide_on_desktop',
+        ];
+
+        $classes = [];
+        foreach ($classMap as $viewportName => $className) {
+            if (array_key_exists($viewportName, $viewport) && $viewport[$viewportName] === false) {
+                $classes[] = $className;
+            }
+        }
+
+        return $classes;
+    }
+
+    /**
      * Keep backward compatibility with legacy conditional values.
      */
     private function normalizeConditionalCheckType($checkType)
@@ -1738,6 +1946,14 @@ class GutenbergEmailParser
      */
     private function renderColumns($innerBlocks, $attrs)
     {
+        if (empty($innerBlocks)) {
+            return '';
+        }
+
+        $innerBlocks = array_values(array_filter($innerBlocks, function ($innerBlock) {
+            return !$this->shouldOmitBlockFromEmail($innerBlock['attrs'] ?? []);
+        }));
+
         if (empty($innerBlocks)) {
             return '';
         }
@@ -1824,13 +2040,20 @@ class GutenbergEmailParser
                 $styles['padding-left'] = $padding . 'px';
                 $styles['padding-right'] = $padding . 'px';
 
+                $columnVisibilityClasses = $this->getBlockViewportVisibilityClasses($column['attrs'] ?? []);
+                $columnClass = 'fc_column';
+                if ($columnVisibilityClasses) {
+                    $columnClass .= ' ' . implode(' ', array_map('sanitize_html_class', $columnVisibilityClasses));
+                }
+
                 $widthMarkup = $widthAttr ? ' width="' . esc_attr($widthAttr) . '"' : '';
-                $columnsHtml .= '<td class="fc_column"' . $widthMarkup . ' style="' . BlockEditorHelper::renderStyles($styles) . '">';
+                $columnHtml = '<td class="' . esc_attr($columnClass) . '"' . $widthMarkup . ' style="' . BlockEditorHelper::renderStyles($styles) . '">';
 
                 $column['attrs']['elem_id'] = $elementId;
 
-                $columnsHtml .= $this->renderColumn($column['innerBlocks'], $column['attrs'], $column['innerHTML']);
-                $columnsHtml .= '</td>';
+                $columnHtml .= $this->renderColumn($column['innerBlocks'], $column['attrs'], $column['innerHTML']);
+                $columnHtml .= '</td>';
+                $columnsHtml .= $this->wrapDesktopHiddenForMso($columnHtml, $columnVisibilityClasses);
             } else {
                 $columnsHtml .= '<td width="' . $columnWidth . '%" style="vertical-align: ' . $verticalAlignment . '; padding: 0 10px;">';
                 $columnsHtml .= $this->renderBlock($column, true);
@@ -1863,6 +2086,142 @@ class GutenbergEmailParser
         $attrs['td_id'] = $attrs['elem_id'] ?? '';
 
         return $this->wrapInTable($html, $attrs);
+    }
+
+    /**
+     * Render core/media-text as an email-safe two-column table.
+     *
+     * Image only: video media yields no media cell. The media and text sit in
+     * real side-by-side table cells so vertical-align centers the shorter column
+     * against the taller one (matching the editor). Reuses the .fc_media_* /
+     * .has_bg_image CSS in block-styles.php / common-style.php, and stacks on
+     * mobile via the .fce_stacked rules there when isStackedOnMobile is on.
+     *
+     * @param array  $innerBlocks Text-side child blocks.
+     * @param array  $attrs       Block attributes (mediaWidth, mediaPosition,
+     *                            verticalAlignment, isStackedOnMobile, imageFill,
+     *                            mediaLink, plus background/spacing collected on elem_id).
+     * @param string $innerHTML   Saved block markup containing the media <figure>.
+     * @return string
+     */
+    private function renderMediaText($innerBlocks, $attrs, $innerHTML)
+    {
+        // Extract the media <figure> from the saved markup. Image only: keep the
+        // figure only when it actually contains an <img>, so video media (or an
+        // empty media slot) yields no media cell and the text spans full width.
+        $figure = '';
+        if (preg_match('/<figure[^>]*>.*?<\/figure>/s', (string)$innerHTML, $figureMatch)
+            && strpos($figureMatch[0], '<img') !== false) {
+            $figure = $figureMatch[0];
+        }
+
+        // Render the text side from child blocks.
+        $content = !empty($innerBlocks) ? $this->renderBlocks($innerBlocks, true) : '';
+
+        // Nothing renderable → emit nothing, consistent with other renderers.
+        if (!$figure && !trim((string)$content)) {
+            return '';
+        }
+
+        // Geometry.
+        $mediaWidth = (int)Arr::get($attrs, 'mediaWidth', 50);
+        $mediaWidth = max(0, min(100, $mediaWidth));
+        $contentWidth = 100 - $mediaWidth;
+        $mediaPosition = Arr::get($attrs, 'mediaPosition', 'left') === 'right' ? 'right' : 'left';
+
+        $verticalAlignment = Arr::get($attrs, 'verticalAlignment', 'center');
+        $verticalAlignment = in_array($verticalAlignment, ['top', 'bottom'], true) ? $verticalAlignment : 'middle';
+
+        $isStackedOnMobile = Arr::get($attrs, 'isStackedOnMobile', true);
+        $hasImageFill = (bool)Arr::get($attrs, 'imageFill');
+        $imageFillClass = $hasImageFill ? 'has_bg_image' : 'no_image_fill';
+
+        // "Crop image to fill" renders the media as a background image on the
+        // figure while the <img> is hidden (opacity:0 via .has_bg_image CSS).
+        // The editor does not inline that background-image, so derive it from the
+        // <img> src (with focal point) to guarantee the image shows in email.
+        if ($figure && $hasImageFill) {
+            $figure = $this->applyMediaTextImageFill($figure, $attrs);
+        }
+
+        // Optional media link — wrap the figure. escapeButtonUrl keeps smartcodes intact.
+        if ($figure && ($mediaLink = Arr::get($attrs, 'mediaLink'))) {
+            $figure = '<a href="' . $this->escapeButtonUrl($mediaLink) . '">' . $figure . '</a>';
+        }
+
+        // Use real side-by-side table cells (not floated tables) so vertical-align
+        // centers the shorter column against the taller one — matching the editor.
+        $vAlignStyle = 'vertical-align: ' . $verticalAlignment . ';';
+
+        // Media cell (only when an image figure exists).
+        $mediaCell = '';
+        if ($figure) {
+            $mediaStyle = $vAlignStyle . ' width: ' . $mediaWidth . '%;';
+            $mediaCell = '<td class="fc_media_table ' . esc_attr($imageFillClass) . '" width="' . $mediaWidth . '%" valign="' . esc_attr($verticalAlignment) . '" style="' . esc_attr($mediaStyle) . '">' . $figure . '</td>';
+        }
+
+        // Text cell. Without media it spans full width. A horizontal gutter on the
+        // media-facing side mirrors the editor's column gap; no vertical padding so
+        // the text aligns with the image height instead of being pushed down.
+        $textWidth = $figure ? $contentWidth : 100;
+        $textStyle = $vAlignStyle . ' width: ' . $textWidth . '%;';
+        if ($figure) {
+            $textStyle .= ($mediaPosition === 'right') ? ' padding-right: 24px;' : ' padding-left: 24px;';
+        }
+        $textCell = '<td class="fc_media_text" width="' . $textWidth . '%" valign="' . esc_attr($verticalAlignment) . '" style="' . esc_attr($textStyle) . '">' . $content . '</td>';
+
+        // mediaPosition controls source order (image-left vs image-right).
+        $cells = ($figure && $mediaPosition === 'right') ? ($textCell . $mediaCell) : ($mediaCell . $textCell);
+
+        // Outer row. The block elem_id carries background-color / spacing that
+        // collectInlineStyles() already emitted as #elem_id { ... }.
+        $id = $attrs['elem_id'] ?? '';
+        $rowClass = 'fce_row fc_row_media_text';
+        if ($isStackedOnMobile) {
+            $rowClass .= ' fce_stacked';
+        }
+
+        $row = '<table id="' . esc_attr($id) . '" class="' . esc_attr($rowClass) . '" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed; border-collapse: collapse;"><tbody><tr>' . $cells . '</tr></tbody></table>';
+
+        return $this->wrapInTable($row, $attrs);
+    }
+
+    /**
+     * Inject a background-image on the media-text figure for "Crop image to fill".
+     *
+     * The .has_bg_image CSS hides the <img> (opacity:0) and shows the figure's
+     * background instead. We source the background from the <img> src and use the
+     * block focal point for background-position, merging into any existing style.
+     *
+     * @param string $figure Media <figure> markup containing an <img>.
+     * @param array  $attrs  Block attributes (focalPoint).
+     * @return string
+     */
+    private function applyMediaTextImageFill($figure, $attrs)
+    {
+        if (!preg_match('/<img[^>]*\ssrc=["\']([^"\']+)["\'][^>]*>/i', $figure, $imgMatch)) {
+            return $figure;
+        }
+
+        $src = $imgMatch[1];
+
+        $focalX = Arr::get($attrs, 'focalPoint.x');
+        $focalY = Arr::get($attrs, 'focalPoint.y');
+        $position = '50% 50%';
+        if (is_numeric($focalX) && is_numeric($focalY)) {
+            $position = round((float)$focalX * 100) . '% ' . round((float)$focalY * 100) . '%';
+        }
+
+        $bgStyle = 'background-image: url(\'' . esc_url($src) . '\'); background-position: ' . $position . '; background-size: cover; background-repeat: no-repeat;';
+
+        // Merge into the figure's existing style attribute, or add one.
+        if (preg_match('/(<figure\b[^>]*\sstyle=")([^"]*)(")/i', $figure, $styleMatch)) {
+            $existing = rtrim(trim($styleMatch[2]), ';');
+            $merged = $existing === '' ? $bgStyle : $existing . '; ' . $bgStyle;
+            return str_replace($styleMatch[0], $styleMatch[1] . $merged . $styleMatch[3], $figure);
+        }
+
+        return preg_replace('/<figure\b/i', '<figure style="' . $bgStyle . '"', $figure, 1);
     }
 
     /**
@@ -2188,6 +2547,55 @@ class GutenbergEmailParser
     }
 
     /**
+     * Append inline CSS to an opening HTML tag without dropping existing styles.
+     */
+    private function appendInlineStyleToTag($tag, $style)
+    {
+        if (preg_match('/\sstyle=(["\'])(.*?)\1/i', $tag, $matches)) {
+            $quote = $matches[1];
+            $existingStyle = rtrim(trim($matches[2]), ';');
+            $newStyle = $existingStyle ? $existingStyle . '; ' . $style : $style;
+
+            // Use str_replace (not preg_replace) so existing style content cannot be
+            // misread as a regex backreference in the replacement string.
+            return str_replace($matches[0], ' style=' . $quote . $newStyle . $quote, $tag);
+        }
+
+        return preg_replace('/>$/', ' style="' . $style . '">', $tag, 1);
+    }
+
+    /**
+     * Apply email-safe stripe backgrounds to table body rows.
+     */
+    private function applyTableStripeStyles($tableContent, $stripeColor = '#f0f0f0')
+    {
+        return preg_replace_callback('/<tbody\b([^>]*)>(.*?)<\/tbody>/is', function ($tbodyMatches) use ($stripeColor) {
+            $rowIndex = 0;
+            $tbodyContent = preg_replace_callback('/<tr\b([^>]*)>(.*?)<\/tr>/is', function ($rowMatches) use (&$rowIndex, $stripeColor) {
+                $rowIndex++;
+
+                if ($rowIndex % 2 === 0) {
+                    return $rowMatches[0];
+                }
+
+                $rowContent = preg_replace_callback('/<(td|th)\b([^>]*)>/i', function ($cellMatches) use ($stripeColor) {
+                    $tag = $this->appendInlineStyleToTag($cellMatches[0], 'background-color: ' . $stripeColor . ';');
+
+                    if (stripos($tag, ' bgcolor=') === false) {
+                        $tag = preg_replace('/>$/', ' bgcolor="' . $stripeColor . '">', $tag, 1);
+                    }
+
+                    return $tag;
+                }, $rowMatches[2]);
+
+                return '<tr' . $rowMatches[1] . '>' . $rowContent . '</tr>';
+            }, $tbodyMatches[2]);
+
+            return '<tbody' . $tbodyMatches[1] . '>' . $tbodyContent . '</tbody>';
+        }, $tableContent);
+    }
+
+    /**
      * Render table block
      */
     private function renderTable($content, $attrs)
@@ -2197,6 +2605,8 @@ class GutenbergEmailParser
             !empty(Arr::get($borderConfig, 'style')) ||
             !empty(Arr::get($borderConfig, 'color')) ||
             !empty(Arr::get($attrs, 'borderColor'));
+        $className = (string)Arr::get($attrs, 'className', '');
+        $isStriped = strpos($className, 'is-style-stripes') !== false;
 
         if ($hasCustomBorder) {
             $borderWidth = Arr::get($borderConfig, 'width', '1px');
@@ -2221,15 +2631,33 @@ class GutenbergEmailParser
         if (preg_match('/<table[^>]*>(.*?)<\/table>/s', $content, $matches)) {
             $tableContent = $matches[1];
             // Add styles to table cells
-            $tableContent = preg_replace('/<td([^>]*)>/', '<td$1 style="' . $cellStyles . '">', $tableContent);
-            $tableContent = preg_replace('/<th([^>]*)>/', '<th$1 style="' . $cellStyles . ' font-weight: bold;">', $tableContent);
+            $tableContent = preg_replace_callback('/<td\b([^>]*)>/i', function ($matches) use ($cellStyles) {
+                return $this->appendInlineStyleToTag($matches[0], $cellStyles);
+            }, $tableContent);
+            $tableContent = preg_replace_callback('/<th\b([^>]*)>/i', function ($matches) use ($cellStyles) {
+                return $this->appendInlineStyleToTag($matches[0], $cellStyles . ' font-weight: bold;');
+            }, $tableContent);
+
+            if ($isStriped) {
+                $tableContent = $this->applyTableStripeStyles($tableContent);
+            }
         } else {
             return '';
         }
 
         $id = $attrs['elem_id'] ?? '';
+        $tableClass = 'fc_table';
+        if ($isStriped) {
+            $tableClass .= ' fc_table_striped';
+        }
 
-        return $this->wrapInTable("<table id='$id' class='fc_table' style=\"{$styles}\">{$tableContent}</table>", $attrs);
+        // The table markup sits inside a <figure> wrapper; keep its caption too.
+        $captionHtml = '';
+        if (preg_match('/<figcaption[^>]*>(.*?)<\/figcaption>/s', $content, $captionMatch) && trim($captionMatch[1]) !== '') {
+            $captionHtml = '<div class="wp-element-caption" style="font-size: 13px; text-align: center; margin-top: 6px;">' . $captionMatch[1] . '</div>';
+        }
+
+        return $this->wrapInTable("<table id='$id' class='{$tableClass}' style=\"{$styles}\">{$tableContent}</table>" . $captionHtml, $attrs);
     }
 
     /**
@@ -2468,48 +2896,10 @@ class GutenbergEmailParser
             }
         }
 
-        // Fallback: Common WordPress and popular theme colors
-        $colors = [
-            // Theme palette colors (adjust these based on your active theme)
-            // Twenty Twenty-Three defaults
-            'theme-palette-color-1' => '#000000', // Base/Black
-            'theme-palette-color-2' => '#6f42c1', // Purple
-            'theme-palette-color-3' => '#007cba', // Blue
-            'theme-palette-color-4' => '#16a085', // Teal
-            'theme-palette-color-5' => '#e74c3c', // Red
-            'theme-palette-color-6' => '#f39c12', // Orange
-            'theme-palette-color-7' => '#ffffff', // White
-            'theme-palette-color-8' => '#f5f5f5', // Light Gray
-            'theme-palette-color-9' => '#cccccc', // Gray
-
-            // Standard WordPress colors
-            'black'                 => '#000000',
-            'white'                 => '#ffffff',
-            'primary'               => '#0073aa',
-            'secondary'             => '#23282d',
-            'tertiary'              => '#F0F0F1',
-
-            // Common named colors
-            'red'                   => '#e74c3c',
-            'blue'                  => '#3498db',
-            'green'                 => '#2ecc71',
-            'yellow'                => '#f1c40f',
-            'orange'                => '#e67e22',
-            'purple'                => '#9b59b6',
-            'cyan'                  => '#1abc9c',
-            'vivid-red'             => '#cf2e2e',
-            'vivid-orange'          => '#ff6900',
-            'vivid-cyan-blue'       => '#0693e3',
-            'vivid-green-cyan'      => '#00d084',
-            'vivid-purple'          => '#9b51e0',
-            'luminous-vivid-amber'  => '#fcb900',
-            'luminous-vivid-orange' => '#ff6900',
-            'light-green-cyan'      => '#7bdcb5',
-            'pale-pink'             => '#f78da7',
-            'pale-cyan-blue'        => '#8ed1fc',
-        ];
-
-        return $colors[$slug] ?? '#0073aa';
+        // No match across the color map, global settings, or theme.json. Return empty so the
+        // block renders without an inline color rather than emitting a wrong hardcoded hex.
+        // (The previous fallback table used placeholder values that did not match real themes.)
+        return '';
     }
 
     /**
@@ -2610,25 +3000,34 @@ class GutenbergEmailParser
 
             // Common font family presets
             $fontFamilyMap = array_merge([
-                'system-ui'  => '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-                'system'     => '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-                'arial'      => 'Arial, Helvetica, sans-serif',
-                'helvetica'  => '"Helvetica Neue", Helvetica, Arial, sans-serif',
-                'times'      => '"Times New Roman", Times, serif',
+                'system-ui'        => '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                'system'           => '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                'arial'            => 'Arial, Helvetica, sans-serif',
+                'helvetica'        => '"Helvetica Neue", Helvetica, Arial, sans-serif',
+                'times'            => '"Times New Roman", Times, serif',
                 'times-new-roman' => '"Times New Roman", Times, serif',
-                'georgia'    => 'Georgia, serif',
-                'courier'    => '"Courier New", Courier, monospace',
-                'courier-new' => '"Courier New", Courier, monospace',
-                'verdana'    => 'Verdana, Geneva, sans-serif',
-                'tahoma'     => 'Tahoma, Geneva, sans-serif',
-                'trebuchet'  => '"Trebuchet MS", Helvetica, sans-serif',
-                'trebuchet-ms' => '"Trebuchet MS", Helvetica, sans-serif',
-                'palatino'   => '"Palatino Linotype", "Book Antiqua", Palatino, serif',
-                'garamond'   => 'Garamond, serif',
-                'impact'     => 'Impact, Charcoal, sans-serif',
-                'comic-sans' => '"Comic Sans MS", cursive, sans-serif',
-                'comic-sans-ms' => '"Comic Sans MS", cursive, sans-serif',
-                'monospace'  => 'Monaco, "Lucida Console", Courier, monospace'
+                'georgia'          => 'Georgia, serif',
+                'courier'          => '"Courier New", Courier, monospace',
+                'courier-new'      => '"Courier New", Courier, monospace',
+                'verdana'          => 'Verdana, Geneva, sans-serif',
+                'tahoma'           => 'Tahoma, Geneva, sans-serif',
+                'trebuchet'        => '"Trebuchet MS", Helvetica, sans-serif',
+                'trebuchet-ms'     => '"Trebuchet MS", Helvetica, sans-serif',
+                'lucida'           => '"Lucida Sans Unicode", "Lucida Grande", sans-serif',
+                'palatino'         => '"Palatino Linotype", "Book Antiqua", Palatino, serif',
+                'garamond'         => 'Garamond, serif',
+                'impact'           => 'Impact, Charcoal, sans-serif',
+                'comic-sans'       => '"Comic Sans MS", cursive, sans-serif',
+                'comic-sans-ms'    => '"Comic Sans MS", cursive, sans-serif',
+                'monospace'        => 'Monaco, "Lucida Console", Courier, monospace',
+                'lato'             => '"Lato", "Helvetica Neue", Helvetica, Arial, sans-serif',
+                'lora'             => '"Lora", Georgia, "Times New Roman", serif',
+                'merriweather'     => '"Merriweather", Georgia, "Times New Roman", serif',
+                'merriweather-sans' => '"Merriweather Sans", "Helvetica Neue", Helvetica, Arial, sans-serif',
+                'noticia-text'     => '"Noticia Text", Georgia, "Times New Roman", serif',
+                'open-sans'        => '"Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif',
+                'roboto'           => '"Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif',
+                'source-sans-pro'  => '"Source Sans Pro", "Helvetica Neue", Helvetica, Arial, sans-serif'
             ], $fontFamilyMap);
         }
 
@@ -2727,9 +3126,16 @@ class GutenbergEmailParser
             $tdClass = 'la-root-column';
         }
 
+        $visibilityClasses = array_filter((array)Arr::get($atts, 'fcrmVisibilityClasses', []));
+        if ($visibilityClasses) {
+            $visibilityClassAttr = implode(' ', array_map('sanitize_html_class', $visibilityClasses));
+            $tableClass .= ' ' . $visibilityClassAttr;
+            $tdClass .= ' ' . $visibilityClassAttr;
+        }
+
         $tdId = Arr::get($atts, 'td_id', '');
 
-        return <<<HTML
+        $html = <<<HTML
 <table role="presentation" class="$tableClass"$tableWidthMarkup$tableAlignMarkup cellspacing="0" cellpadding="0" border="0">
     <tr>
         <td id="$tdId" class="$tdClass">
@@ -2738,6 +3144,21 @@ class GutenbergEmailParser
     </tr>
 </table>
 HTML;
+
+        return $this->wrapDesktopHiddenForMso($html, $visibilityClasses);
+    }
+
+    /**
+     * Hide desktop-only blocks from Outlook/MSO, which does not reliably honor
+     * responsive media queries in email markup.
+     */
+    private function wrapDesktopHiddenForMso($html, $visibilityClasses)
+    {
+        if (!in_array('fcrm_hide_on_desktop', (array)$visibilityClasses, true)) {
+            return $html;
+        }
+
+        return "<!--[if !mso]><!-->\n" . $html . "\n<!--<![endif]-->";
     }
 
     private function resolveFontSizeValue($slugOrSize)

@@ -35,7 +35,12 @@ class AbandonCartController extends Controller
 
         foreach ($enabledDrivers as $driver) {
             if (!in_array($driver->getTriggerName(), $activeTriggers, true)) {
-                $missingAutomations[] = $driver->getProviderLabel();
+                // Include the provider slug so the UI can scope the "no automation" notice
+                // (doc link + starter template differ per provider).
+                $missingAutomations[] = [
+                    'provider' => $driver->getProviderSlug(),
+                    'label'    => $driver->getProviderLabel(),
+                ];
             }
 
             $formattedDrivers[$driver->getProviderSlug()] = [

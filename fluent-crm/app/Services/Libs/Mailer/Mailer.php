@@ -6,7 +6,7 @@ use FluentCrm\Framework\Support\Arr;
 
 class Mailer
 {
-    public static function send($data, $subscriber = null, $emailModel = null)
+    public static function send($data, $subscriber = null, $emailModel = null, $preThrottled = false)
     {
 
         $headers = static::buildHeaders($data, $subscriber, $emailModel);
@@ -31,6 +31,21 @@ class Mailer
 
                 $to = $name . ' <' . $to . '>';
             }
+        }
+
+        // Global cross-process rate cap. Every email — campaigns, automation,
+        // double opt-in, transactional — funnels through here, so this is the
+        // single point that holds the install's aggregate send rate within the
+        // provider's per-second limit. Fail-open: never blocks if its store is
+        // unavailable. Placed after the simulated-mail / empty-recipient guards
+        // so only real dispatches consume a slot.
+        //
+        // The bulk handlers reserve their slot BEFORE marking the row sent (so a
+        // crash mid-wait leaves it recoverable) and pass $preThrottled=true to
+        // skip a second reservation here. Direct callers (double opt-in, etc.)
+        // leave it false and get throttled here.
+        if (!$preThrottled) {
+            GlobalRateLimiter::throttle($data);
         }
 
         return wp_mail(
@@ -71,9 +86,9 @@ class Mailer
             $isTransactional = $campaign && Arr::get($campaign->settings, 'is_transactional') == 'yes';
             if (!$isTransactional) {
                 $args = [
-                    'fluentcrm'   => 1,
-                    'route'       => 'unsubscribe',
-                    'secure_hash' => fluentCrmGetContactManagedHash($subscriber->id)
+                    FLUENTCRM_EXTERNAL_URL_PARAM => 1,
+                    'route'                      => 'unsubscribe',
+                    'secure_hash'                => fluentCrmGetContactManagedHash($subscriber->id)
                 ];
                 if ($emailModel) {
                     $args['ce_id'] = $emailModel->id;

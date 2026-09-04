@@ -34,6 +34,7 @@ use FluentCrm\App\Modules\AbandonCart\SettingsController as AbandonCartSettingsC
 use FluentCrm\App\Http\Controllers\AiController;
 use FluentCrm\App\Http\Controllers\EmailPatternController;
 use FluentCrm\App\Http\Controllers\MCPSettingsController;
+// WhatsApp routes are registered by the Pro plugin's Messaging module.
 
 /*
  * /tags endpoints
@@ -179,6 +180,9 @@ $router->prefix('templates')->withPolicy('TemplatePolicy')->group(function ($rou
     $router->get('/all', [TemplateController::class, 'allTemplates']);
     $router->get('/smartcodes', [TemplateController::class, 'getSmartCodes']);
     $router->post('/', [TemplateController::class, 'create']);
+    // $router->get('default-campaign-template', [TemplateController::class, 'getDefaultCampaignTemplate']);
+    // $router->post('default-campaign-template', [TemplateController::class, 'setDefaultCampaignTemplate']);
+    // $router->delete('default-campaign-template', [TemplateController::class, 'deleteDefaultCampaignTemplate']);
 
     $router->get('{id}', [TemplateController::class, 'template'])->int('id');
     $router->put('{id}', [TemplateController::class, 'update'])->int('id');
@@ -234,12 +238,15 @@ $router->prefix('funnels')->withPolicy('FunnelPolicy')->group(function ($router)
     $router->post('funnel/save-funnel-sequences', [FunnelController::class, 'saveSequencesFallback']);
     $router->post('funnel/save-email-action-fallback', [FunnelController::class, 'saveEmailActionFallback']);
 
+    $router->post('{id}/export', [FunnelController::class, 'exportFunnel'])->int('id');
+
     $router->get('{id}', [FunnelController::class, 'getFunnel'])->int('id');
     $router->post('{id}/clone', [FunnelController::class, 'cloneFunnel'])->int('id');
     $router->put('{id}', [FunnelController::class, 'updateFunnelProperty'])->int('id');
     $router->put('{id}/change-trigger', [FunnelController::class, 'changeTrigger'])->int('id');
     $router->post('{id}/sequences', [FunnelController::class, 'saveSequences'])->int('id');
     $router->put('funnel/{id}/title', [FunnelController::class, 'updateFunnelTitle'])->int('id');
+    $router->put('{id}/sticky-note', [FunnelController::class, 'updateStickyNote'])->int('id');
 
     $router->post('{id}/sequences/save-email-action', [FunnelController::class, 'saveEmailAction'])->int('id');
 
@@ -430,7 +437,7 @@ $router->prefix('import')->withPolicy('ImportUserPolicy')->group(function ($rout
     $router->post('csv-upload', [CsvController::class, 'upload']);
     $router->post('csv-import', [CsvController::class, 'import']);
 
-    $router->post('users', [UsersController::class, 'import']);
+    $router->post('users', [UsersController::class, 'importUsers']);
 
     $router->get('drivers', [ImporterController::class, 'getDrivers']);
     $router->get('drivers/{driver}', [ImporterController::class, 'getDriver'])->alphaNumDash('driver');
@@ -484,6 +491,11 @@ $router->prefix('migrators')->withPolicy('SettingsPolicy')->group(function ($rou
     $router->post('/summary', [MigratorController::class, 'getImportSummary']);
     $router->post('/import', [MigratorController::class, 'handleImport']);
 });
+
+// The conversation inbox (`messaging/threads`) and its one-shot legacy
+// migration (`messaging/migration`) are registered by FluentCampaign Pro, in
+// app/Modules/Messaging/Http/messaging_api.php. Messaging has no free channel
+// to send on, so the models, controllers and routes live with the channels.
 
 $router->prefix('companies')->withPolicy('CompanyPolicy')->group(function ($router) {
     $router->get('/', [CompanyController::class, 'index']);

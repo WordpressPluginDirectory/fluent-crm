@@ -10,11 +10,7 @@ class FileSystem
      */
     public function _get($file)
     {
-        $arr = explode('/', $file);
-        $fileName = end($arr);
-        return file_get_contents(
-            $this->getDir() . '/' . $fileName
-        );
+        return file_get_contents($this->getSafeUploadFilePath($file));
     }
 
     /**
@@ -36,7 +32,7 @@ class FileSystem
      */
     public function _getAbsolutePathOfFile($file)
     {
-        return $this->_getDir() . '/' . $file;
+        return $this->getSafeUploadFilePath($file);
     }
 
     /**
@@ -81,10 +77,48 @@ class FileSystem
         $files = (array)$files;
 
         foreach ($files as $file) {
-            $arr = explode('/', $file);
-            $fileName = end($arr);
-            wp_delete_file($this->getDir() . '/' . $fileName);
+            wp_delete_file($this->getSafeUploadFilePath($file));
         }
+    }
+
+    /**
+     * Resolve only the opaque filenames created by this class' upload flow.
+     *
+     * CSV import requests arrive after upload and therefore contain a client
+     * supplied value. Requiring the generated prefix, a plain filename, and a
+     * real path inside the dedicated directory prevents a later request from
+     * turning that value into an arbitrary read or delete path.
+     *
+     * @param mixed $file Upload filename returned by _put().
+     * @return string Absolute path to a regular file in the FluentCRM upload directory.
+     * @throws \InvalidArgumentException When the filename is not a valid uploaded CSV token.
+     */
+    private function getSafeUploadFilePath($file)
+    {
+        if (!is_string($file)
+            || $file === ''
+            || basename($file) !== $file
+            || strpos($file, '/') !== false
+            || strpos($file, '\\') !== false
+            || strpos($file, '..') !== false
+            || strpos($file, "\0") !== false
+            || !preg_match('/^fluentcrm-[a-f0-9]{32}-fluentcrm-/', $file)
+        ) {
+            throw new \InvalidArgumentException(__('Invalid CSV import file.', 'fluent-crm'));
+        }
+
+        $directory = realpath($this->getDir());
+        $path = $directory ? realpath($directory . DIRECTORY_SEPARATOR . $file) : false;
+
+        if (!$directory
+            || !$path
+            || !is_file($path)
+            || strpos($path, $directory . DIRECTORY_SEPARATOR) !== 0
+        ) {
+            throw new \InvalidArgumentException(__('Invalid CSV import file.', 'fluent-crm'));
+        }
+
+        return $path;
     }
 
     /**

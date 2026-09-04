@@ -142,6 +142,7 @@ class FunnelCampaign extends Campaign
     public function subscribe($subscriberIds, $emailArgs = [], $isModel = false)
     {
         $updateIds = [];
+        $insertedCount = 0;
 
         $mailHeaders = Helper::getMailHeadersFromSettings(Arr::get($this->settings, 'mailer_settings', []));
 
@@ -221,7 +222,32 @@ class FunnelCampaign extends Campaign
                 $email = wp_parse_args($emailArgs, $email);
             }
 
-            $inserted = CampaignEmail::create($email);
+            /*
+             * Create the queue row and count it in the same transaction, so an
+             * interruption can never leave a row persisted but uncounted. The
+             * increment has no self-healing recount behind it the way the old
+             * exact COUNT(*) did, so a row that misses its increment would stay
+             * uncounted permanently.
+             *
+             * Deliberately tight: only these two statements are inside. The
+             * parsing filters below run arbitrary third-party code, and holding
+             * the fc_campaigns row lock across that would serialise concurrent
+             * funnel workers on the very row this method writes.
+             */
+            fluentCrmDb()->beginTransaction();
+            try {
+                $inserted = CampaignEmail::create($email);
+
+                fluentCrmDb()->table('fc_campaigns')->where('id', $this->id)
+                    ->increment('recipients_count', 1);
+
+                fluentCrmDb()->commit();
+            } catch (\Throwable $e) {
+                fluentCrmDb()->rollback();
+                throw $e;
+            }
+
+            $insertedCount++;
 
             $subscriber->campaign_id = $this->id;
             $subscriber->email_id = $inserted->id;
@@ -267,10 +293,19 @@ class FunnelCampaign extends Campaign
             $updateIds[] = $inserted->id;
         }
 
-        $emailCount = $this->getEmailCount();
-        if ($emailCount != $this->recipients_count) {
-            $this->recipients_count = $emailCount;
-            $this->save();
+        // recipients_count is maintained per row above. This only mirrors the
+        // committed total onto the in-memory model, without marking the column
+        // dirty, so a later unrelated save() can't write a stale total back.
+        //
+        // The counter was previously derived from an exact COUNT(*) over the
+        // step's entire send history, once per enrolled contact. That count is
+        // O(rows-ever-sent), so an automation's email step got steadily slower
+        // as it aged. DB-side increments are also atomic, where the old
+        // read-modify-write lost updates between concurrent funnel workers
+        // enrolling into the same reference campaign.
+        if ($insertedCount) {
+            $this->recipients_count = absint($this->recipients_count) + $insertedCount;
+            $this->syncOriginalAttribute('recipients_count');
         }
 
         return $updateIds;

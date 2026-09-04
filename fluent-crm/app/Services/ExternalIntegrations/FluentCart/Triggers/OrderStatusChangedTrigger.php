@@ -65,10 +65,11 @@ class OrderStatusChangedTrigger extends BaseTrigger
     public function getFunnelConditionDefaults($funnel)
     {
         return [
-            'product_ids'   => '',
-            'from_status'   => 'any',
-            'to_status'     => 'any',
-            'run_multiple'  => 'no'
+            'product_ids'        => [],
+            'product_categories' => [],
+            'from_status'        => 'any',
+            'to_status'          => 'any',
+            'run_multiple'       => 'no'
         ];
     }
 
@@ -94,7 +95,16 @@ class OrderStatusChangedTrigger extends BaseTrigger
                 'option_key'  => 'fluent_cart_products',
                 'is_multiple' => true,
                 'label'       => __('Target Products', 'fluent-crm'),
-                'inline_help' => __('Keep it blank to run to any product status changed', 'fluent-crm'),
+                'help'        => __('Select for which products this automation will run', 'fluent-crm'),
+                'inline_help' => __('Keep it blank to run for any product\'s order status change', 'fluent-crm'),
+            ],
+            'product_categories' => [
+                'type'        => 'rest_selector',
+                'option_key'  => 'fluent_cart_product_categories',
+                'is_multiple' => true,
+                'label'       => __('Or Target Product Categories', 'fluent-crm'),
+                'help'        => __('Select for which product category the automation will run', 'fluent-crm'),
+                'inline_help' => __('Keep it blank to run to any category products', 'fluent-crm'),
             ],
             'from_status' => [
                 'type' => 'select',
@@ -122,8 +132,8 @@ class OrderStatusChangedTrigger extends BaseTrigger
         $orderData = $originalArgs[0] ?? [];
 
         $order = Arr::get($orderData, 'order', []);
-        $fromStatus = Arr::get($orderData, 'old_status', []);
-        $toStatus = Arr::get($orderData, 'new_status', []);
+        $fromStatus = Arr::get($orderData, 'old_status', '');
+        $toStatus = Arr::get($orderData, 'new_status', '');
 
         $customer = Arr::get($order, 'customer');
 
@@ -144,6 +154,8 @@ class OrderStatusChangedTrigger extends BaseTrigger
         if (!$willProcess) {
             return;
         }
+
+        $subscriberData = wp_parse_args($subscriberData, $funnel->settings);
 
         $subscriberData['status'] = (!empty($subscriberData['subscription_status'])) ? $subscriberData['subscription_status'] : 'subscribed';
         unset($subscriberData['subscription_status']);
@@ -169,38 +181,42 @@ class OrderStatusChangedTrigger extends BaseTrigger
             }
         }
 
-        $selectedProductIds = Arr::get($conditions, 'product_ids', []);
+        $orderProductCategories = CartHelper::getProductCategoriesByIds($orderedProductIds);
 
-        // Product filter is optional — only apply it when products are selected.
-        // Status filters and run_multiple checks below must still run either way.
-        if (!empty($selectedProductIds) && !array_intersect($selectedProductIds, $orderedProductIds)) {
+        $selectedProductIds = Arr::get($conditions, 'product_ids', []);
+        $selectedProductCategories = Arr::get($conditions, 'product_categories', []);
+
+        if (!empty($selectedProductIds) || !empty($selectedProductCategories)) {
+            $productMatch = !empty($selectedProductIds) && !empty(array_intersect($selectedProductIds, $orderedProductIds));
+            $categoryMatch = !empty($selectedProductCategories) && !empty(array_intersect($selectedProductCategories, $orderProductCategories));
+
+            if (!$productMatch && !$categoryMatch) {
+                return false;
+            }
+        }
+
+        $fromCondition = Arr::get($conditions, 'from_status', 'any');
+        if ($fromCondition !== 'any' && $fromCondition !== $fromStatus) {
             return false;
         }
 
-        if($conditions['from_status'] != 'any') {
-            if($conditions['from_status'] != $fromStatus) {
-                return false;
-            }
-        }
-
-        if($conditions['to_status'] != 'any') {
-            if($conditions['to_status'] != $toStatus) {
-                return false;
-            }
+        $toCondition = Arr::get($conditions, 'to_status', 'any');
+        if ($toCondition !== 'any' && $toCondition !== $toStatus) {
+            return false;
         }
 
         $subscriber = FunnelHelper::getSubscriber($subscriberData['email']);
 
-        // check run_only_one
-        if ($subscriber && FunnelHelper::ifAlreadyInFunnel($funnel->id, $subscriber->id)) {
-            $multipleRun = Arr::get($conditions, 'run_multiple') == 'yes';
-            if ($multipleRun) {
-                FunnelHelper::removeSubscribersFromFunnel($funnel->id, [$subscriber->id]);
-            } else {
-                return false;
+        if ($subscriber) {
+            $funnelSub = FunnelHelper::ifAlreadyInFunnel($funnel->id, $subscriber->id);
+            if ($funnelSub) {
+                $multipleRun = Arr::get($conditions, 'run_multiple') == 'yes';
+                if ($multipleRun) {
+                    FunnelHelper::removeSubscribersFromFunnel($funnel->id, [$subscriber->id]);
+                }
+                return $multipleRun;
             }
         }
-
 
         return true;
     }

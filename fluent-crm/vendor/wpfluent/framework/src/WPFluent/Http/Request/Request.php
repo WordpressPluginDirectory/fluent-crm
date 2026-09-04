@@ -772,7 +772,7 @@ class Request
         }
 
         $message = $message
-            ?: "Request has benn terminated with status {$status}.";
+            ?: "Request has been terminated with status {$status}.";
 
         return wp_send_json(
             is_array($message) ? $message : ['message' => (string) $message], $status

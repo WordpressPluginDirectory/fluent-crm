@@ -135,13 +135,30 @@ class FluentCartTrackingInit
 
         $checkoutData = $fctCart->checkout_data ?: [];
 
-        // Calculate totals for the table columns (FluentCart stores amounts in cents)
+        // Calculate totals for the table columns (FluentCart stores amounts in cents).
+        // $subtotal is the items' price BEFORE any discount.
         $subtotal = $fctCart->getItemsSubtotal();
-        $discountTotal = (int)Arr::get($checkoutData, 'custom_checkout_data.discount_total', 0)
-            + (int)Arr::get($checkoutData, 'manual_discount', 0);
-        $shippingTotal = (int)Arr::get($checkoutData, 'custom_checkout_data.shipping_total', 0);
+
+        // Coupon and per-item manual discounts are stored on each cart item as
+        // discount_total (manual_discount + coupon_discount). The old code only read
+        // custom_checkout_data.discount_total, which is empty for normal frontend
+        // coupons, so the coupon was never reflected in the cart total. Sum the per-item
+        // discounts plus any checkout-level (manual/upgrade/prorate) discounts.
+        $itemsDiscountTotal = array_sum(array_map(function ($item) {
+            return (int)Arr::get($item, 'discount_total', 0);
+        }, $fctCart->cart_data ?: []));
+
+        $discountTotal = $itemsDiscountTotal
+            + (int)Arr::get($checkoutData, 'manual_discount.amount', 0)
+            + (int)Arr::get($checkoutData, 'upgrade_discount.amount', 0)
+            + (int)Arr::get($checkoutData, 'prorate_credit.amount', 0);
+
+        $shippingTotal = (int)$fctCart->getShippingTotal();
         $taxTotal = (int)Arr::get($checkoutData, 'tax_data.tax_total', 0);
-        $total = $subtotal - $discountTotal + $shippingTotal + $taxTotal;
+
+        // Use FluentCart's authoritative total so the displayed Cart Total matches the
+        // checkout exactly (coupons, fees, shipping and tax all included).
+        $total = (int)$fctCart->getEstimatedTotal();
 
         if ($total <= 0) {
             $record = $this->getCurrentRecord($billingEmail);
@@ -163,6 +180,19 @@ class FluentCartTrackingInit
             $fullName = trim($contact->first_name . ' ' . $contact->last_name);
         }
 
+        // Build a per-coupon breakdown (code + discounted value) for the cart details view.
+        // FluentCart stores the applied codes on $fctCart->coupons and the amount each code
+        // saved (in cents) on checkout_data.__per_coupon_discounts, keyed by code.
+        $perCouponDiscounts = Arr::get($checkoutData, '__per_coupon_discounts', []);
+        $couponDetails = [];
+        foreach (($fctCart->coupons ?: []) as $couponCode) {
+            $couponAmount = (int)Arr::get($perCouponDiscounts, $couponCode, 0);
+            $couponDetails[] = [
+                'code'     => $couponCode,
+                'discount' => number_format($couponAmount / 100, 2, '.', ''),
+            ];
+        }
+
         // Snapshot the FluentCart data as-is for easy restore
         $data = [
             'cart_hash'  => $fctCart->cart_hash,
@@ -180,12 +210,13 @@ class FluentCartTrackingInit
             'total'      => number_format($total / 100, 2, '.', ''),
             'currency'   => $currency,
             'cart'       => [
-                'cart_data'     => $fctCart->cart_data ?: [],
-                'checkout_data' => $checkoutData,
-                'coupons'       => $fctCart->coupons ?: [],
-                'utm_data'      => $fctCart->utm_data ?: [],
-                'cart_group'    => $fctCart->cart_group,
-                'customer_data' => $this->buildCustomerData($checkoutData),
+                'cart_data'      => $fctCart->cart_data ?: [],
+                'checkout_data'  => $checkoutData,
+                'coupons'        => $fctCart->coupons ?: [],
+                'coupons_detail' => $couponDetails,
+                'utm_data'       => $fctCart->utm_data ?: [],
+                'cart_group'     => $fctCart->cart_group,
+                'customer_data'  => $this->buildCustomerData($checkoutData),
             ],
         ];
 
@@ -613,6 +644,8 @@ class FluentCartTrackingInit
                 '{{ab_cart_fluent_cart.cart_total}}'        => __('Cart Total', 'fluent-crm'),
                 '{{ab_cart_fluent_cart.subtotal}}'          => __('Cart Subtotal (only products)', 'fluent-crm'),
                 '{{ab_cart_fluent_cart.shipping_total}}'    => __('Cart Shipping Total', 'fluent-crm'),
+                '{{ab_cart_fluent_cart.discount_total}}'    => __('Cart Discount Total', 'fluent-crm'),
+                '{{ab_cart_fluent_cart.coupon_codes}}'      => __('Applied Coupon Codes', 'fluent-crm'),
                 '{{ab_cart_fluent_cart.tax_total}}'         => __('Cart Tax Total', 'fluent-crm'),
                 '{{ab_cart_fluent_cart.billing_full_name}}' => __('Billing Full Name', 'fluent-crm'),
                 '{{ab_cart_fluent_cart.billing_address}}'   => __('Billing Address', 'fluent-crm'),
@@ -677,6 +710,11 @@ class FluentCartTrackingInit
                 return $formatPrice($abCart->subtotal);
             case 'shipping_total':
                 return $abCart->shipping ? $formatPrice($abCart->shipping) : $defaultValue;
+            case 'discount_total':
+                return ($abCart->discounts > 0) ? $formatPrice($abCart->discounts) : $defaultValue;
+            case 'coupon_codes':
+                $couponCodes = Arr::get($abCart->cart, 'coupons', []);
+                return $couponCodes ? implode(', ', $couponCodes) : $defaultValue;
             case 'tax_total':
                 return $abCart->tax ? $formatPrice($abCart->tax) : $defaultValue;
             case 'billing_full_name':
@@ -700,10 +738,10 @@ class FluentCartTrackingInit
                 return Arr::get($abCart->cart, 'checkout_data.form_data.' . $valueKey, $defaultValue);
             case 'recovery_url':
                 return add_query_arg([
-                    'fluentcrm'  => 1,
-                    'route'      => 'general',
-                    'handler'    => 'fc_cart_fluent_cart',
-                    'fc_ab_hash' => $abCart->checkout_key
+                    FLUENTCRM_EXTERNAL_URL_PARAM => 1,
+                    'route'                      => 'general',
+                    'handler'                    => 'fc_cart_fluent_cart',
+                    'fc_ab_hash'                 => $abCart->checkout_key
                 ], home_url());
             case 'cart_items_table':
                 return $abCart->getCartItemsHtml();

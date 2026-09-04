@@ -20,7 +20,6 @@ require_once(FLUENTCRM_PLUGIN_PATH . 'database/migrations/FunnelMetrics.php');
 require_once(FLUENTCRM_PLUGIN_PATH . 'database/migrations/Terms.php');
 require_once(FLUENTCRM_PLUGIN_PATH . 'database/migrations/TermRelations.php');
 
-
 class FluentCRMDBMigrator
 {
     public static function run($network_wide = false)
@@ -65,6 +64,8 @@ class FluentCRMDBMigrator
 
         \FluentCrmMigrations\Terms::migrate();
         \FluentCrmMigrations\TermRelations::migrate();
+
+        do_action('fluentcrm_after_db_migrate');
 
         update_option('_fluentcrm_db_version', FLUENTCRM_DB_VERSION);
     }

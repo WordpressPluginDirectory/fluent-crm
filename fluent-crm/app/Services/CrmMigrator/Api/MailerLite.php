@@ -47,11 +47,11 @@ class MailerLite
         /* Execute request based on method. */
         switch ($method) {
             case 'POST':
-                $response = wp_remote_post($endpointUrl, $args);
+                $response = wp_safe_remote_post($endpointUrl, $args);
                 break;
 
             case 'GET':
-                $response = wp_remote_get($endpointUrl, $args);
+                $response = wp_safe_remote_get($endpointUrl, $args);
                 break;
         }
 

@@ -17,6 +17,7 @@ use FluentCrm\Framework\Encryption\Encrypter;
 use FluentCrm\Framework\Database\Orm\Model;
 use FluentCrm\Framework\Validator\Validator;
 use FluentCrm\Framework\Foundation\RequestGuard;
+use FluentCrm\Framework\Foundation\Exceptions\ExceptionHandler;
 use FluentCrm\Framework\Database\DatabaseManager;
 use FluentCrm\Framework\Database\DatabaseTransactionsManager;
 use FluentCrm\Framework\Database\ConnectionResolver;
@@ -55,6 +56,7 @@ class ComponentBinder
         'Mail',
         'Paginator',
         'Pipeline',
+        'ExceptionHandler',
     ];
 
     /**
@@ -343,7 +345,26 @@ class ComponentBinder
             return new Pipeline($app);
         });
 
-        $this->app->alias(Pipeline::class, 'pipeline');  
+        $this->app->alias(Pipeline::class, 'pipeline');
+    }
+
+    /**
+     * Bind the exception-handler registry into the container.
+     *
+     * Default is the bare `Foundation\Exceptions\ExceptionHandler` (no
+     * renderables registered). Plugins override by re-binding their own
+     * subclass to the same key from `boot/bindings.php` BEFORE the first
+     * request hits Route.
+     *
+     * @return null
+     */
+    protected function bindExceptionHandler()
+    {
+        $this->app->singleton(ExceptionHandler::class, function ($app) {
+            return new ExceptionHandler();
+        });
+
+        $this->app->alias(ExceptionHandler::class, 'exception.handler');
     }
 
     /**

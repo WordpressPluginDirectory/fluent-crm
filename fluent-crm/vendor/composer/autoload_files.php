@@ -6,5 +6,6 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    '5acfa953fb947d9c094f156813b35f4f' => $vendorDir . '/wpfluent/framework/src/WPFluent/Support/mbstring-loader.php',
     '9680a2abca0f3f510cf2fd1b6d61afe6' => $baseDir . '/boot/globals.php',
 );

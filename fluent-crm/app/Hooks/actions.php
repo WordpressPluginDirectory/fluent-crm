@@ -16,7 +16,11 @@
 (new \FluentCrm\App\Hooks\Handlers\FluentConditionalContentBlockHandler())->register();
 (new \FluentCrm\App\Modules\AbandonCart\AbandonCart())->register();
 
+
 (new \FluentCrm\App\Hooks\Handlers\AutoSubscribeHandler())->register();
+
+// WhatsApp Module is a Pro feature — initialized by fluentcampaign-pro plugin
+// The free plugin only provides: Vue frontend, database migrations, and helper functions
 
 add_action('fluentcrm_contacts_filter_subscriber', function ($query, $filters) {
     return (new \FluentCrm\App\Models\Subscriber)->buildGeneralPropertiesFilterQuery($query, $filters);
@@ -64,7 +68,6 @@ $app->addAction('wp_ajax_nopriv_fluent_crm_account_form', 'PrefFormHandler@handl
 
 // Fallback for funnel sequence save ajax
 $app->addAction('wp_ajax_fluentcrm_save_funnel_sequence_ajax', 'FunnelHandler@saveSequences');
-$app->addAction('wp_ajax_fluentcrm_export_funnel', 'FunnelHandler@exportFunnel');
 $app->addAction('wp_ajax_fluentcrm_save_funnel_email_action', 'FunnelHandler@saveEmailAction');
 $app->addAction('wp_ajax_fluentcrm_save_campaign_email_body', 'FunnelHandler@saveCampaignEmail');
 
@@ -76,7 +79,16 @@ $app->addAction('wp_ajax_fluentcrm_save_campaign_email_body', 'FunnelHandler@sav
 
 (new \FluentCrm\App\Hooks\Handlers\FunnelHandler())->register();
 
-// External Integrations
+// FluentCart's modal checkout fires fluent_cart/before_payment_methods and calls die()
+// during init at priority 10, before a priority-10 callback can register. Only
+// CheckoutSubscription needs to be early — everything else in FluentCart::init() is fine at 10.
+add_action('init', function () {
+    if (defined('FLUENTCART_VERSION')) {
+        (new \FluentCrm\App\Services\ExternalIntegrations\FluentCart\CheckoutSubscription())->init();
+    }
+}, 1);
+
+// All external integrations (FluentCart::init() runs here too, minus CheckoutSubscription)
 add_action('init', function () {
     (new \FluentCrm\App\Hooks\Handlers\Integrations())->register();
 }, 10);
@@ -100,6 +112,7 @@ $app->addAction('fluentcrm_subscriber_status_to_complained', 'Cleanup@handleUnsu
 $app->addAction('fluentcrm_subscriber_status_to_spammed', 'Cleanup@handleUnsubscribe');
 
 $app->addAction('fluent_crm/contact_email_changed', 'Cleanup@handleContactEmailChanged');
+$app->addAction('fluent_crm/subscriber_confirmed_via_double_optin', 'Cleanup@resetSoftBounceCount');
 $app->addAction('delete_user', 'Cleanup@handleUserDelete', 10, 3);
 $app->addAction('fluent_crm/company_deleted', 'Cleanup@handleCompanyDelete', 10, 1);
 $app->addAction('after_password_reset', 'Cleanup@handleUserPasswordChanged', 10, 1);

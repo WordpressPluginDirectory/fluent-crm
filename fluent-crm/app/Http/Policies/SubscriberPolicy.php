@@ -20,10 +20,27 @@ class SubscriberPolicy extends BasePolicy
      */
     public function verifyRequest(Request $request)
     {
-        if ($request->method() == 'GET') {
+        if ($this->requestMethod($request) == 'GET') {
             return $this->currentUserCan('fcrm_read_contacts');
         }
 
+        return $this->currentUserCan('fcrm_manage_contacts');
+    }
+
+    /**
+     * Authorize sending a one-off email to a single contact from the profile page.
+     *
+     * This is intentionally gated on `fcrm_manage_contacts` (not `fcrm_manage_emails`):
+     * emailing an individual managed contact is part of the Contacts Add/Update feature,
+     * matching the profile UI which shows the "Send Email" button to `fcrm_manage_contacts`
+     * holders. Declared explicitly so this route no longer relies on the verifyRequest
+     * fallback (repo Rule 6: destructive methods must have a dedicated policy method).
+     *
+     * @param \FluentCrm\Framework\Http\Request\Request $request
+     * @return Boolean
+     */
+    public function sendCustomEmail(Request $request)
+    {
         return $this->currentUserCan('fcrm_manage_contacts');
     }
 
@@ -54,7 +71,8 @@ class SubscriberPolicy extends BasePolicy
 
     public function handleBulkActions(Request $request)
     {
-        $actionName = $request->get('action_name');
+        // Match the controller's normalization before selecting a capability.
+        $actionName = sanitize_text_field($request->get('action_name', ''));
 
         if (!$actionName) {
             return $this->currentUserCan('fcrm_manage_contacts');

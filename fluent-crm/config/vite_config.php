@@ -4,10 +4,26 @@
         'name' => 'ActionMenu',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Error.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_fc-bits.js'
+        ]
+    ],
+    '_Adder.js' => [
+        'file' => 'Adder.js',
+        'name' => 'Adder',
+        'imports' => [
+            '_vendor-element-plus.js',
+            '_fc-bits.js',
+            '_vendor.js',
+            '_fc-bits-ui.js',
+            '_CompanyInfoSideContact.js',
+            '__OptionSelector.js',
+            '__IntlTelInput.js'
+        ],
+        'dynamicImports' => [
+            'resources/v3app/src/Modules/Profile/Parts/_CustomFields.vue'
         ]
     ],
     '_Animation.js' => [
@@ -40,10 +56,10 @@
         'name' => 'BlockComposer',
         'imports' => [
             '_vendor-element-plus.js',
+            '_input-popover-dropdown2.js',
             '_vendor.js',
-            '_input-popover-dropdown.js',
             '_fc-bits-ui.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_data_config.js',
             '_EmailPreview.js',
             '_PaginationBar.js',
@@ -58,8 +74,8 @@
         'name' => 'BuiltinTemplateDrawer',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_fc-bits-ui.js',
+            '_vendor.js',
             '_PromoCard.js'
         ]
     ],
@@ -97,11 +113,23 @@
         'name' => 'CompanyInfoSide',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_data_config.js',
             '_CompanyEditForm.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_BaseCard.js'
+        ]
+    ],
+    '_CompanyInfoSideContact.js' => [
+        'file' => 'CompanyInfoSideContact.js',
+        'name' => 'CompanyInfoSideContact',
+        'imports' => [
+            '_vendor-element-plus.js',
+            '_Filterer.js',
+            '_fc-bits-ui.js',
+            '_vendor.js',
+            '_data_config.js',
+            '_CompanyEditForm.js'
         ]
     ],
     '_Confirm.js' => [
@@ -136,10 +164,10 @@
         'name' => 'Csv',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_fc-bits.js',
             '_Error.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_CustomIcon.js' => [
@@ -164,10 +192,10 @@
         'name' => 'EmailComposer',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_BlockComposer.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_TestEmail.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -176,8 +204,8 @@
         'name' => 'EmailPreview',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PreviewIframeBuilder.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_TestEmail.js',
             '_CampaignSubjectLines.js'
@@ -188,8 +216,8 @@
         'name' => 'EmailSubjects',
         'imports' => [
             '_vendor-element-plus.js',
+            '__FormBuilder.js',
             '_vendor.js',
-            '__FormBuilder2.js',
             '_fc-bits-ui.js',
             '__MailerConfig.js'
         ]
@@ -207,9 +235,9 @@
         'name' => 'Exporter',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_data_config.js',
             '_GenericPromo.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -218,10 +246,10 @@
         'name' => 'FieldEditor',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_fc-bits.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_EmailComposer.js',
             '__OptionSelector.js',
             '__AjaxSelector.js',
@@ -285,8 +313,8 @@
         'name' => 'InlineDoc',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_ItemCopier.js' => [
@@ -294,8 +322,8 @@
         'name' => 'ItemCopier',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_ItemCopier2.js' => [
@@ -329,8 +357,8 @@
         'name' => 'PhotoWidget',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_PreviewIframeBuilder.js' => [
@@ -347,6 +375,16 @@
         'imports' => [
             '_vendor.js',
             '_fc-bits-ui.js'
+        ]
+    ],
+    '_ProfileListTags.js' => [
+        'file' => 'ProfileListTags.js',
+        'name' => 'ProfileListTags',
+        'imports' => [
+            '_vendor-element-plus.js',
+            '_CompanyInfoSideContact.js',
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_PromoCard.js' => [
@@ -397,8 +435,8 @@
         'name' => 'Searcher',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_SettingsHeader.js' => [
@@ -406,8 +444,8 @@
         'name' => 'SettingsHeader',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_SettingsIcons.js' => [
@@ -426,35 +464,13 @@
             '_fc-bits-ui.js'
         ]
     ],
-    '_SmsMessageCell.js' => [
-        'file' => 'SmsMessageCell.js',
-        'name' => 'SmsMessageCell',
-        'imports' => [
-            '_vendor.js',
-            '_fc-bits-ui.js',
-            '_vendor-element-plus.js'
-        ]
-    ],
-    '_Tagger.js' => [
-        'file' => 'Tagger.js',
-        'name' => 'Tagger',
-        'imports' => [
-            '_vendor-element-plus.js',
-            '_vendor.js',
-            '_data_config.js',
-            '_CompanyEditForm.js',
-            '_fc-bits-ui.js',
-            '_fc-bits.js',
-            '_Filterer.js'
-        ]
-    ],
     '_TestEmail.js' => [
         'file' => 'TestEmail.js',
         'name' => 'TestEmail',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_TopNav.js' => [
@@ -479,8 +495,8 @@
         'name' => '_CampaignDetails',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_ReadableRecipientTagger.js',
             '_PreviewIframeBuilder.js',
@@ -492,9 +508,9 @@
         'name' => '_ContactsTable',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_Tagger.js',
+            '_CompanyInfoSideContact.js',
             '_Filterer.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_Filterer2.js',
             '_data_config.js',
@@ -506,14 +522,11 @@
             '__OptionSelector.js',
             'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
             'resources/v3app/src/Modules/Contacts/Filter/ActiveFiltersBar.vue',
-            '_fc-bits.js',
-            '__IntlTelInput.js',
+            '_Adder.js',
             '_Badge.js',
+            '_contacts.js',
             '_relations.js',
             '_clipboard.js'
-        ],
-        'dynamicImports' => [
-            'resources/v3app/src/Modules/Profile/Parts/_CustomFields.vue'
         ]
     ],
     '__CustomSegementSettings.js' => [
@@ -521,9 +534,9 @@
         'name' => '_CustomSegementSettings',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             'resources/v3app/src/Modules/Contacts/RichFilters/Filters.vue',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '__FormBuilder.js' => [
@@ -531,11 +544,14 @@
         'name' => '_FormBuilder',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_fc-bits-ui.js',
-            '__OptionSelector.js',
+            '_vendor.js',
+            '_PhotoWidget.js',
             '_input-popover-dropdown2.js',
-            '_data_config.js'
+            '_data_config.js',
+            '__OptionSelector.js',
+            '__AjaxSelector.js',
+            '__VerifiedEmailInput.js'
         ]
     ],
     '__FormBuilder2.js' => [
@@ -545,19 +561,16 @@
             '_vendor-element-plus.js',
             '_vendor.js',
             '_fc-bits-ui.js',
-            '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
-            '_data_config.js',
             '__OptionSelector.js',
-            '__AjaxSelector.js',
-            '__VerifiedEmailInput.js'
+            '_input-popover-dropdown.js',
+            '_data_config.js'
         ]
     ],
     '__ImportRunner.js' => [
         'file' => '_ImportRunner.js',
         'name' => '_ImportRunner',
         'imports' => [
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_vendor.js',
             '_fc-bits-ui.js',
             '_vendor-element-plus.js',
@@ -569,9 +582,9 @@
         'name' => '_IndividualProgress',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Badge.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '__InlineCheckbox.js' => [
@@ -600,13 +613,14 @@
         'name' => '_LinkMetrics',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             '_Confirm.js',
             'resources/admin/Modules/Email/Campaigns/_components/EmailPreview.vue',
             '_GenericPromo.js',
             '_Badge.js',
             '_fc-bits-ui.js',
+            '_rest-download.js',
+            '_vendor.js',
             '_SettingsIcons.js'
         ]
     ],
@@ -615,8 +629,8 @@
         'name' => '_MailerConfig',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__VerifiedEmailInput.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -624,7 +638,7 @@
         'file' => '_MergeCodes.js',
         'name' => '_MergeCodes',
         'imports' => [
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_vendor.js',
             '_fc-bits-ui.js'
         ]
@@ -687,17 +701,29 @@
         'name' => '_report_widget',
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     '_clipboard.js' => [
         'file' => 'clipboard.js',
         'name' => 'clipboard'
     ],
+    '_contacts.js' => [
+        'file' => 'contacts.js',
+        'name' => 'contacts',
+        'imports' => [
+            '_vendor.js',
+            '_fc-bits.js'
+        ]
+    ],
     '_data_config.js' => [
         'file' => 'data_config.js',
         'name' => 'data_config'
+    ],
+    '_emailPermissions.js' => [
+        'file' => 'emailPermissions.js',
+        'name' => 'emailPermissions'
     ],
     '_fc-bits-ui.js' => [
         'file' => 'fc-bits-ui.js',
@@ -726,6 +752,7 @@
         'name' => 'input-popover-dropdown',
         'imports' => [
             '_vendor-element-plus.js',
+            '_CustomIcon.js',
             '_vendor.js',
             '_fc-bits-ui.js'
         ]
@@ -736,13 +763,16 @@
         'imports' => [
             '_vendor-element-plus.js',
             '_vendor.js',
-            '_CustomIcon.js',
             '_fc-bits-ui.js'
         ]
     ],
     '_relations.js' => [
         'file' => 'relations.js',
         'name' => 'relations'
+    ],
+    '_rest-download.js' => [
+        'file' => 'rest-download.js',
+        'name' => 'rest-download'
     ],
     '_vendor-element-plus.js' => [
         'file' => 'vendor-element-plus.js',
@@ -760,13 +790,13 @@
             'flags@2x.webp'
         ]
     ],
-    'node_modules/.pnpm/intl-tel-input@26.9.2/node_modules/intl-tel-input/build/img/flags.webp' => [
+    'node_modules/.pnpm/intl-tel-input@26.9.1/node_modules/intl-tel-input/build/img/flags.webp' => [
         'file' => 'flags.webp',
-        'src' => 'node_modules/.pnpm/intl-tel-input@26.9.2/node_modules/intl-tel-input/build/img/flags.webp'
+        'src' => 'node_modules/.pnpm/intl-tel-input@26.9.1/node_modules/intl-tel-input/build/img/flags.webp'
     ],
-    'node_modules/.pnpm/intl-tel-input@26.9.2/node_modules/intl-tel-input/build/img/flags@2x.webp' => [
+    'node_modules/.pnpm/intl-tel-input@26.9.1/node_modules/intl-tel-input/build/img/flags@2x.webp' => [
         'file' => 'flags@2x.webp',
-        'src' => 'node_modules/.pnpm/intl-tel-input@26.9.2/node_modules/intl-tel-input/build/img/flags@2x.webp'
+        'src' => 'node_modules/.pnpm/intl-tel-input@26.9.1/node_modules/intl-tel-input/build/img/flags@2x.webp'
     ],
     'resources/admin/Modules/Dashboard/Dashboard.vue' => [
         'file' => 'admin/Modules/Dashboard/Dashboard.js',
@@ -816,17 +846,18 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             'resources/admin/Modules/Email/Campaigns/_components/EmailPreview.vue',
             '_TopNav.js',
             '_fc-bits-ui.js',
             '_PageHeader.js',
+            '_vendor.js',
             '_DataTable.js',
             '_FloatingBulkActionShell.js',
             'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
             'resources/v3app/src/Modules/Contacts/Filter/ActiveFiltersBar.vue',
             '_Badge.js',
+            '_emailPermissions.js',
             '_PreviewIframeBuilder.js'
         ]
     ],
@@ -837,8 +868,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_EmailSubjects.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_BlockComposer.js',
             '_BaseCard.js',
@@ -852,9 +883,9 @@
             '_data_config.js',
             '_CampaignSubjectLines.js',
             '_Confirm.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '__OptionSelector.js',
             '__AjaxSelector.js',
             '__VerifiedEmailInput.js',
@@ -874,10 +905,11 @@
         'imports' => [
             '_fc-bits.js',
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm.js',
             '_PaginationBar.js',
             '_InlineDoc.js',
+            '_vendor.js',
+            '_emailPermissions.js',
             '_fc-bits-ui.js',
             '_EmailPreview.js',
             '_TopNav.js',
@@ -887,6 +919,7 @@
             '_Filterer2.js',
             '_data_config.js',
             '_PromoCard.js',
+            '_rest-download.js',
             '_PreviewIframeBuilder.js',
             '_TestEmail.js',
             '_CampaignSubjectLines.js'
@@ -904,9 +937,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__LinkMetrics.js',
             '_DataTable.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_PaginationBar.js',
             '_GenericPromo.js',
@@ -919,6 +952,7 @@
             'resources/admin/Modules/Email/Campaigns/_components/EmailPreview.vue',
             '_PreviewIframeBuilder.js',
             '_Badge.js',
+            '_rest-download.js',
             '_SettingsIcons.js',
             '_PromoCard.js',
             '_CampaignSubjectLines.js',
@@ -932,10 +966,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PreviewIframeBuilder.js',
             '_Badge.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     'resources/admin/Modules/Email/EmailSequences/AllSequences.vue' => [
@@ -953,7 +987,9 @@
             '_TopNav.js',
             '_PageHeader.js',
             '_DataTable.js',
-            '_FloatingBulkActionShell.js'
+            '_FloatingBulkActionShell.js',
+            '_emailPermissions.js',
+            '_rest-download.js'
         ]
     ],
     'resources/admin/Modules/Email/EmailSequences/EditEmail.vue' => [
@@ -963,13 +999,13 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_BlockComposer.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_TestEmail.js',
             '_PageHeader.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '_EmailPreview.js',
             '_PreviewIframeBuilder.js',
@@ -1006,13 +1042,14 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__LinkMetrics.js',
             '__MailerConfig.js',
             '_EmailPreview.js',
             '_PageHeader.js',
             '_fc-bits-ui.js',
             '_BaseCard.js',
+            '_emailPermissions.js',
+            '_vendor.js',
             '_PaginationBar.js',
             '_Confirm.js',
             'resources/admin/Modules/Email/Campaigns/_components/EmailPreview.vue',
@@ -1020,6 +1057,7 @@
             '_Badge.js',
             '_GenericPromo.js',
             '_PromoCard.js',
+            '_rest-download.js',
             '_SettingsIcons.js',
             '__VerifiedEmailInput.js',
             '_TestEmail.js',
@@ -1033,14 +1071,15 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_RecipientTaggerForm.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_PaginationBar.js',
             '_DataTable.js',
             '_FloatingBulkActionShell.js',
             '_Confirm.js',
             '_Badge.js',
+            '_emailPermissions.js',
             '_PageHeader.js',
             '_fc-bits.js'
         ]
@@ -1063,11 +1102,11 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_BlockComposer.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '_EmailPreview.js',
             '_PreviewIframeBuilder.js',
@@ -1091,9 +1130,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_EmailPreview.js',
             '_PaginationBar.js',
+            '_emailPermissions.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_PreviewIframeBuilder.js',
             '_TestEmail.js',
@@ -1107,9 +1147,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_BlockComposer.js',
             '_BaseCard.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_EmailSubjects.js',
             '_TestEmail.js',
@@ -1118,8 +1158,9 @@
             '__LinkMetrics.js',
             '_ReadableRecipientTagger.js',
             '_PageHeader.js',
-            '_input-popover-dropdown.js',
-            '__FormBuilder2.js',
+            '_emailPermissions.js',
+            '_input-popover-dropdown2.js',
+            '__FormBuilder.js',
             '_PhotoWidget.js',
             '__OptionSelector.js',
             '__AjaxSelector.js',
@@ -1137,6 +1178,7 @@
             'resources/admin/Modules/Email/Campaigns/_components/EmailPreview.vue',
             '_Badge.js',
             '_GenericPromo.js',
+            '_rest-download.js',
             '_SettingsIcons.js'
         ]
     ],
@@ -1147,9 +1189,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_RecipientTaggerForm.js',
             '__conditions.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_fc-bits.js'
         ]
@@ -1161,9 +1203,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_RecipientTaggerForm.js',
             '__conditions.js',
+            '_vendor.js',
             '_BaseCard.js',
             '_fc-bits-ui.js',
             '_fc-bits.js'
@@ -1177,16 +1219,18 @@
         'imports' => [
             '_fc-bits.js',
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm.js',
             '_PaginationBar.js',
             '_DataTable.js',
+            '_vendor.js',
+            '_emailPermissions.js',
             '_fc-bits-ui.js',
             '_TopNav.js',
             '_Badge.js',
             '_PageHeader.js',
             '_FloatingBulkActionShell.js',
             '_GenericPromo.js',
+            '_rest-download.js',
             '_PromoCard.js'
         ],
         'dynamicImports' => [
@@ -1218,6 +1262,7 @@
             '_vendor-element-plus.js',
             '_vendor.js',
             '_TestEmail.js',
+            '_emailPermissions.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -1228,11 +1273,11 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_BlockComposer.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
-            '_input-popover-dropdown.js',
-            '__FormBuilder2.js',
+            '_input-popover-dropdown2.js',
+            '__FormBuilder.js',
             '_PhotoWidget.js',
             '_data_config.js',
             '__OptionSelector.js',
@@ -1256,12 +1301,13 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_BlockComposer.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_TestEmail.js',
             '_fc-bits-ui.js',
-            '_input-popover-dropdown.js',
+            '_vendor.js',
+            '_rest-download.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '_EmailPreview.js',
             '_PreviewIframeBuilder.js',
@@ -1284,14 +1330,14 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm.js',
             '_PaginationBar.js',
             '_TopNav.js',
             '_fc-bits-ui.js',
             '_PageHeader.js',
             '_DataTable.js',
-            '_FloatingBulkActionShell.js'
+            '_FloatingBulkActionShell.js',
+            '_vendor.js'
         ]
     ],
     'resources/admin/Modules/Email/Templates/Templates.vue' => [
@@ -1301,10 +1347,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm.js',
             '_PaginationBar.js',
             '_fc-bits-ui.js',
+            '_vendor.js',
             '_InlineDoc.js',
             '_EmailPreview.js',
             '_BuiltinTemplateDrawer.js',
@@ -1313,6 +1359,7 @@
             '_PageHeader.js',
             '_DataTable.js',
             '_GenericPromo.js',
+            '_rest-download.js',
             '_PreviewIframeBuilder.js',
             '_TestEmail.js',
             '_CampaignSubjectLines.js',
@@ -1326,8 +1373,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__OptionSelector.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_ItemCopier2.js',
             '_CustomIcon.js',
@@ -1346,13 +1393,13 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             '__IndividualProgress.js',
             '_Confirm.js',
             '_fc-bits-ui.js',
             '_PageHeader.js',
             '_FloatingBulkActionShell.js',
+            '_vendor.js',
             '_Badge.js'
         ]
     ],
@@ -1363,18 +1410,18 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_FieldEditor.js',
             '_Animation.js',
             '_ProBadge.js',
             '_fc-bits-ui.js',
+            '_vendor.js',
             '__report_widget.js',
             '_InlineDoc.js',
             '_PromoCard.js',
             '_fc-bits.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '__OptionSelector.js',
             '__AjaxSelector.js',
@@ -1411,10 +1458,12 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
+            '_DataTable.js',
+            '_FloatingBulkActionShell.js',
             '__IndividualProgress.js',
             '__eChart.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '__report_widget.js',
             '_Confirm.js',
@@ -1424,6 +1473,7 @@
             '_Badge.js',
             'resources/admin/Modules/Email/Campaigns/_components/EmailPreview.vue',
             '_PreviewIframeBuilder.js',
+            '_rest-download.js',
             '_SettingsIcons.js',
             '_PromoCard.js'
         ]
@@ -1436,10 +1486,10 @@
         'imports' => [
             '_fc-bits.js',
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_ProBadge.js',
             '_PromoCard.js',
             '_fc-bits-ui.js',
+            '_vendor.js',
             '_Confirm.js',
             '_PaginationBar.js',
             '_InlineDoc.js',
@@ -1447,7 +1497,8 @@
             '_data_config.js',
             '_PageHeader.js',
             '_FloatingBulkActionShell.js',
-            '_Badge.js'
+            '_Badge.js',
+            '_rest-download.js'
         ],
         'dynamicImports' => [
             'resources/v3app/src/Modules/Labels/Labels.vue',
@@ -1462,14 +1513,14 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_FieldEditor.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_PromoCard.js',
             '_fc-bits.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '__OptionSelector.js',
             '__AjaxSelector.js',
@@ -1517,13 +1568,13 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__ImportRunner.js',
             '__OptionSelector.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '__AjaxSelector.js',
             '__VerifiedEmailInput.js'
@@ -1537,10 +1588,10 @@
         'imports' => [
             '_fc-bits.js',
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             '_DataTable.js',
             '_FloatingBulkActionShell.js',
+            '_vendor.js',
             '_Confirm.js',
             '__OptionSelector.js',
             '_Badge.js',
@@ -1549,8 +1600,8 @@
             '_EmailComposer.js',
             '__MailerConfig.js',
             '_BlockComposer.js',
-            '_input-popover-dropdown.js',
-            '__FormBuilder2.js',
+            '_input-popover-dropdown2.js',
+            '__FormBuilder.js',
             '_PhotoWidget.js',
             '_data_config.js',
             '__AjaxSelector.js',
@@ -1586,9 +1637,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             '_DataTable.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -1599,15 +1650,16 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             '_Confirm.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_fc-bits-ui.js',
             '_clipboard.js',
             '_FloatingBulkActionShell.js',
+            '_rest-download.js',
+            '_vendor.js',
             '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '__OptionSelector.js',
             '__AjaxSelector.js',
@@ -1621,9 +1673,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             '_DataTable.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -1634,8 +1686,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
+            '_DataTable.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -1646,11 +1699,11 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
+            '__FormBuilder.js',
             '_vendor.js',
-            '__FormBuilder2.js',
             '_fc-bits-ui.js',
             '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '__OptionSelector.js',
             '__AjaxSelector.js',
@@ -1664,18 +1717,20 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_Tagger.js',
-            '_fc-bits-ui.js',
+            '_ProfileListTags.js',
             '_PhotoWidget.js',
             '_PaginationBar.js',
+            '_vendor.js',
+            '_fc-bits-ui.js',
             '_Confirm.js',
             '_data_config.js',
+            '_CompanyInfoSideContact.js',
             '_PromoCard.js',
+            '_contacts.js',
             '_Badge.js',
+            '_Filterer.js',
             '_CompanyEditForm.js',
-            '_fc-bits.js',
-            '_Filterer.js'
+            '_fc-bits.js'
         ]
     ],
     'resources/admin/Modules/Reports/Chart/world.json' => [
@@ -1716,9 +1771,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_fc-bits-ui.js',
             '_ItemCopier.js',
+            '_vendor.js',
             '_BaseCard.js'
         ]
     ],
@@ -1783,7 +1838,7 @@
             'resources/v3app/src/Modules/Settings/_GeneralSettings.vue',
             'resources/v3app/src/Modules/Settings/parts/CustomContactFields.vue',
             'resources/v3app/src/Modules/Settings/SmartLinks/Links.vue',
-            'resources/v3app/src/Modules/Settings/_SMSSettings.vue',
+            'resources/v3app/src/Modules/Settings/_MessagingSettings.vue',
             'resources/v3app/src/Modules/Settings/_DoubleOptinSettings.vue',
             'resources/v3app/src/Modules/Settings/DeveloperWebhooks/_IncomingWebhooks.vue',
             'resources/v3app/src/Modules/Settings/SystemAdminTools/_CronJobMonitor.vue',
@@ -1810,16 +1865,9 @@
             'resources/admin/Modules/Settings/AddOns.vue',
             'resources/admin/Modules/Reports/ReportsHome.vue',
             'resources/admin/Modules/Migrator/Home.vue',
-            'resources/v3app/src/Modules/SMS/Campaigns/Campaigns.vue',
-            'resources/v3app/src/Modules/SMS/AllSMS.vue',
-            'resources/v3app/src/Modules/SMS/Campaigns/CreateFlow.vue',
-            'resources/v3app/src/Modules/SMS/Campaigns/CreateFlow.vue',
-            'resources/v3app/src/Modules/SMS/Campaigns/ViewSMSCampaign.vue',
-            'resources/v3app/src/Modules/SMS/Campaigns/Import.vue',
             'resources/admin/Modules/Profile/Profile.vue',
             'resources/v3app/src/Modules/Profile/Parts/ProfileOverview.vue',
             'resources/admin/Modules/Profile/Parts/ProfileEmails.vue',
-            'resources/v3app/src/Modules/Profile/Parts/ProfileSMS.vue',
             'resources/admin/Modules/Profile/Parts/ProfileFormSubmissions.vue',
             'resources/admin/Modules/Profile/Parts/ProfileNotes.vue',
             'resources/admin/Modules/Profile/Parts/ProfilePurchaseHistory.vue',
@@ -1866,6 +1914,73 @@
             '_fc-bits.js'
         ]
     ],
+    'resources/admin/shared/element-plus-icons.js' => [
+        'file' => 'admin/shared/element-plus-icons.js',
+        'name' => 'element-plus-icons',
+        'src' => 'resources/admin/shared/element-plus-icons.js',
+        'isEntry' => true,
+        'imports' => [
+            '_vendor-element-plus.js',
+            '_vendor.js'
+        ]
+    ],
+    'resources/admin/shared/element-plus.js' => [
+        'file' => 'admin/shared/element-plus.js',
+        'name' => 'element-plus',
+        'src' => 'resources/admin/shared/element-plus.js',
+        'isEntry' => true,
+        'imports' => [
+            '_vendor-element-plus.js',
+            '_vendor.js'
+        ]
+    ],
+    'resources/admin/shared/ui.js' => [
+        'file' => 'admin/shared/ui.js',
+        'name' => 'ui',
+        'src' => 'resources/admin/shared/ui.js',
+        'isEntry' => true,
+        'imports' => [
+            '_fc-bits.js',
+            '_rest-download.js',
+            '_fc-bits-ui.js',
+            '_data_config.js',
+            '_emailPermissions.js',
+            '_DataTable.js',
+            '_PageHeader.js',
+            '_PaginationBar.js',
+            '_BaseCard.js',
+            '_Badge.js',
+            '_input-popover-dropdown.js',
+            '_FloatingBulkActionShell.js',
+            '_Confirm.js',
+            '_TestEmail.js',
+            '_ReadableRecipientTagger.js',
+            '_RecipientTaggerForm.js',
+            '_ProfileListTags.js',
+            '_Adder.js',
+            'resources/v3app/src/Modules/Labels/Labels.vue',
+            'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
+            'resources/v3app/src/Modules/Contacts/Filter/ActiveFiltersBar.vue',
+            '_vendor.js',
+            '_vendor-element-plus.js',
+            '_CustomIcon.js',
+            '_CompanyInfoSideContact.js',
+            '_Filterer.js',
+            '_CompanyEditForm.js',
+            '__OptionSelector.js',
+            '__IntlTelInput.js'
+        ]
+    ],
+    'resources/admin/shared/vue.js' => [
+        'file' => 'admin/shared/vue.js',
+        'name' => 'vue',
+        'src' => 'resources/admin/shared/vue.js',
+        'isEntry' => true,
+        'imports' => [
+            '_vendor.js',
+            '_vendor-element-plus.js'
+        ]
+    ],
     'resources/admin/visual-editor/visual-editor.js' => [
         'file' => 'admin/visual-editor/visual-editor.js',
         'name' => 'visual-editor',
@@ -1876,7 +1991,7 @@
             '_vendor.js',
             '_fc-bits-ui.js',
             '__MergeCodes.js',
-            '_input-popover-dropdown.js'
+            '_input-popover-dropdown2.js'
         ]
     ],
     'resources/images/fluentcrm-logo.png' => [
@@ -1927,11 +2042,12 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_CompanyInfoSide.js',
             '_Csv.js',
             '_GenericPromo2.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
+            '_rest-download.js',
             '_Filterer2.js',
             '_data_config.js',
             '_Searcher.js',
@@ -1965,14 +2081,15 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm2.js',
-            '__FormBuilder.js',
+            '__FormBuilder2.js',
             '_FloatingBulkActionShell.js',
             '_clipboard.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
+            '_rest-download.js',
             '__OptionSelector.js',
-            '_input-popover-dropdown2.js',
+            '_input-popover-dropdown.js',
             '_CustomIcon.js',
             '_data_config.js'
         ]
@@ -1984,14 +2101,15 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__ContactsTable.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
-            '_Tagger.js',
+            '_Adder.js',
+            '_CompanyInfoSideContact.js',
+            '_Filterer.js',
             '_data_config.js',
             '_CompanyEditForm.js',
             '_fc-bits.js',
-            '_Filterer.js',
             '_Filterer2.js',
             '_Searcher.js',
             '_PaginationBar.js',
@@ -2001,10 +2119,11 @@
             '__OptionSelector.js',
             'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
             'resources/v3app/src/Modules/Contacts/Filter/ActiveFiltersBar.vue',
-            '__IntlTelInput.js',
             '_Badge.js',
+            '_contacts.js',
             '_relations.js',
-            '_clipboard.js'
+            '_clipboard.js',
+            '__IntlTelInput.js'
         ]
     ],
     'resources/v3app/src/Modules/Companies/CompanyExternalView.vue' => [
@@ -2025,10 +2144,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_CompanyInfoSide.js',
             '_PageHeader.js',
             '_Confirm2.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_data_config.js',
             '_CompanyEditForm.js',
@@ -2055,23 +2174,37 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '__ContactsTable.js',
+            '_Adder.js',
             '_ProBadge.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_Csv.js',
-            '__FormBuilder.js',
+            '__FormBuilder2.js',
             '__OptionSelector.js',
             '__ImportRunner.js',
             '_Exporter.js',
-            '_Tagger.js',
+            '_contacts.js',
+            '__ContactsTable.js',
             'resources/v3app/src/Modules/Contacts/RichFilters/Filters.vue',
             '_PromoCard.js',
             '_ContactHeaderPopNav.js',
             '_PageHeader.js',
+            '_fc-bits.js',
+            '_CompanyInfoSideContact.js',
             '_Filterer.js',
-            '_Filterer2.js',
             '_data_config.js',
+            '_CompanyEditForm.js',
+            '__IntlTelInput.js',
+            '_Error.js',
+            '_input-popover-dropdown.js',
+            '_CustomIcon.js',
+            '__FormBuilder.js',
+            '_PhotoWidget.js',
+            '_input-popover-dropdown2.js',
+            '__AjaxSelector.js',
+            '__VerifiedEmailInput.js',
+            '_GenericPromo.js',
+            '_Filterer2.js',
             '_Searcher.js',
             '_PaginationBar.js',
             '_DataTable.js',
@@ -2079,21 +2212,9 @@
             '_Confirm.js',
             'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
             'resources/v3app/src/Modules/Contacts/Filter/ActiveFiltersBar.vue',
-            '_fc-bits.js',
-            '__IntlTelInput.js',
             '_Badge.js',
             '_relations.js',
             '_clipboard.js',
-            '_Error.js',
-            '_input-popover-dropdown2.js',
-            '_CustomIcon.js',
-            '__FormBuilder2.js',
-            '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
-            '__AjaxSelector.js',
-            '__VerifiedEmailInput.js',
-            '_GenericPromo.js',
-            '_CompanyEditForm.js',
             '__TaxonomyTermsSelector.js'
         ]
     ],
@@ -2104,9 +2225,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue' => [
@@ -2116,8 +2237,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Contacts/RichFilters/Filters.vue' => [
@@ -2141,8 +2262,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             'resources/v3app/src/Modules/Contacts/RichFilters/Filters.vue',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '__AjaxSelector.js',
             '__TaxonomyTermsSelector.js',
@@ -2156,12 +2277,13 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm.js',
             '_fc-bits-ui.js',
             '_PageHeader.js',
+            '_vendor.js',
             '_GenericPromo2.js',
             '_DataTable.js',
+            '_rest-download.js',
             '_PromoCard.js'
         ]
     ],
@@ -2172,9 +2294,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__CustomSegementSettings.js',
             '_PageHeader.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             'resources/v3app/src/Modules/Contacts/RichFilters/Filters.vue',
             '__AjaxSelector.js',
@@ -2189,21 +2311,21 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__CustomSegementSettings.js',
             '__ContactsTable.js',
             '_Exporter.js',
             '_fc-bits-ui.js',
             '_PageHeader.js',
+            '_vendor.js',
             'resources/v3app/src/Modules/Contacts/RichFilters/Filters.vue',
             '__AjaxSelector.js',
             '__TaxonomyTermsSelector.js',
             '__OptionSelector.js',
-            '_Tagger.js',
+            '_CompanyInfoSideContact.js',
+            '_Filterer.js',
             '_data_config.js',
             '_CompanyEditForm.js',
             '_fc-bits.js',
-            '_Filterer.js',
             '_Filterer2.js',
             '_Searcher.js',
             '_PaginationBar.js',
@@ -2212,8 +2334,10 @@
             '_Confirm.js',
             'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
             'resources/v3app/src/Modules/Contacts/Filter/ActiveFiltersBar.vue',
+            '_Adder.js',
             '__IntlTelInput.js',
             '_Badge.js',
+            '_contacts.js',
             '_relations.js',
             '_clipboard.js',
             '_GenericPromo.js',
@@ -2227,10 +2351,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm.js',
             '_fc-bits-ui.js',
-            '_DataTable.js'
+            '_DataTable.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Lists/List.vue' => [
@@ -2251,10 +2375,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm2.js',
             '_ActionMenu.js',
-            '__FormBuilder.js',
+            '__FormBuilder2.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_PaginationBar.js',
             '_DataTable.js',
@@ -2263,7 +2387,7 @@
             '_Error.js',
             '_fc-bits.js',
             '__OptionSelector.js',
-            '_input-popover-dropdown2.js',
+            '_input-popover-dropdown.js',
             '_CustomIcon.js',
             '_data_config.js'
         ]
@@ -2275,26 +2399,11 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             'resources/v3app/src/Modules/Profile/Parts/_CustomFields.vue',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '__IntlTelInput.js',
             '_fc-bits.js'
-        ]
-    ],
-    'resources/v3app/src/Modules/Profile/Parts/ProfileSMS.vue' => [
-        'file' => 'v3app/src/Modules/Profile/Parts/ProfileSMS.js',
-        'name' => 'ProfileSMS',
-        'src' => 'resources/v3app/src/Modules/Profile/Parts/ProfileSMS.vue',
-        'isDynamicEntry' => true,
-        'imports' => [
-            '_vendor-element-plus.js',
-            '_vendor.js',
-            '_Confirm.js',
-            '_PaginationBar.js',
-            '_DataTable.js',
-            '_Badge.js',
-            '_fc-bits-ui.js'
         ]
     ],
     'resources/v3app/src/Modules/Profile/Parts/_CustomFields.vue' => [
@@ -2312,94 +2421,6 @@
             'resources/v3app/src/Modules/Settings/parts/CustomContactFields.vue'
         ]
     ],
-    'resources/v3app/src/Modules/SMS/AllSMS.vue' => [
-        'file' => 'v3app/src/Modules/SMS/AllSMS.js',
-        'name' => 'AllSMS',
-        'src' => 'resources/v3app/src/Modules/SMS/AllSMS.vue',
-        'isDynamicEntry' => true,
-        'imports' => [
-            '_vendor-element-plus.js',
-            '_vendor.js',
-            '_PaginationBar.js',
-            '_Confirm.js',
-            '_DataTable.js',
-            '_FloatingBulkActionShell.js',
-            '_SmsMessageCell.js',
-            '_Badge.js',
-            '_fc-bits-ui.js',
-            '_PageHeader.js',
-            'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
-            'resources/v3app/src/Modules/Contacts/Filter/ActiveFiltersBar.vue'
-        ]
-    ],
-    'resources/v3app/src/Modules/SMS/Campaigns/Campaigns.vue' => [
-        'file' => 'v3app/src/Modules/SMS/Campaigns/Campaigns.js',
-        'name' => 'Campaigns',
-        'src' => 'resources/v3app/src/Modules/SMS/Campaigns/Campaigns.vue',
-        'isDynamicEntry' => true,
-        'imports' => [
-            '_vendor-element-plus.js',
-            '_vendor.js',
-            '_Confirm.js',
-            '_PaginationBar.js',
-            '_DataTable.js',
-            '_FloatingBulkActionShell.js',
-            'resources/v3app/src/Modules/Labels/Labels.vue',
-            '_fc-bits-ui.js',
-            '_SmsMessageCell.js',
-            '_Badge.js',
-            'resources/v3app/src/Modules/Contacts/Filter/FilterPopover.vue',
-            'resources/v3app/src/Modules/Contacts/Filter/ActiveFiltersBar.vue',
-            '_PageHeader.js'
-        ]
-    ],
-    'resources/v3app/src/Modules/SMS/Campaigns/CreateFlow.vue' => [
-        'file' => 'v3app/src/Modules/SMS/Campaigns/CreateFlow.js',
-        'name' => 'CreateFlow',
-        'src' => 'resources/v3app/src/Modules/SMS/Campaigns/CreateFlow.vue',
-        'isDynamicEntry' => true,
-        'imports' => [
-            '_vendor-element-plus.js',
-            '_vendor.js',
-            '_RecipientTaggerForm.js',
-            '_ReadableRecipientTagger.js',
-            '_data_config.js',
-            '_Confirm.js',
-            '_fc-bits-ui.js',
-            '_BaseCard.js',
-            '_input-popover-dropdown2.js',
-            '_fc-bits.js',
-            '_CustomIcon.js'
-        ]
-    ],
-    'resources/v3app/src/Modules/SMS/Campaigns/Import.vue' => [
-        'file' => 'v3app/src/Modules/SMS/Campaigns/Import.js',
-        'name' => 'Import',
-        'src' => 'resources/v3app/src/Modules/SMS/Campaigns/Import.vue',
-        'isDynamicEntry' => true,
-        'imports' => [
-            '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js'
-        ]
-    ],
-    'resources/v3app/src/Modules/SMS/Campaigns/ViewSMSCampaign.vue' => [
-        'file' => 'v3app/src/Modules/SMS/Campaigns/ViewSMSCampaign.js',
-        'name' => 'ViewSMSCampaign',
-        'src' => 'resources/v3app/src/Modules/SMS/Campaigns/ViewSMSCampaign.vue',
-        'isDynamicEntry' => true,
-        'imports' => [
-            '_vendor-element-plus.js',
-            '_vendor.js',
-            '_ReadableRecipientTagger.js',
-            '_fc-bits-ui.js',
-            '_PaginationBar.js',
-            '_DataTable.js',
-            '_Badge.js',
-            '_BaseCard.js',
-            '_fc-bits.js'
-        ]
-    ],
     'resources/v3app/src/Modules/Settings/DeveloperWebhooks/_IncomingWebhooks.vue' => [
         'file' => 'v3app/src/Modules/Settings/DeveloperWebhooks/_IncomingWebhooks.js',
         'name' => '_IncomingWebhooks',
@@ -2407,8 +2428,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_ItemCopier2.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_DataTable.js',
             '_SettingsHeader.js',
@@ -2426,10 +2447,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsIcons.js',
             '_fc-bits-ui.js',
-            '_Animation.js'
+            '_Animation.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Settings/SmartLinks/Links.vue' => [
@@ -2439,15 +2460,15 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
+            '__FormBuilder2.js',
             '_vendor.js',
-            '__FormBuilder.js',
             '_fc-bits-ui.js',
             '_PaginationBar.js',
             '_DataTable.js',
             '_ItemCopier2.js',
             '_SettingsHeader.js',
             '__OptionSelector.js',
-            '_input-popover-dropdown2.js',
+            '_input-popover-dropdown.js',
             '_CustomIcon.js',
             '_data_config.js'
         ],
@@ -2462,8 +2483,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsHeader.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -2474,8 +2495,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_fc-bits-ui.js',
+            '_vendor.js',
             '_SettingsHeader.js'
         ]
     ],
@@ -2486,9 +2507,11 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsHeader.js',
-            '_fc-bits-ui.js'
+            '_fc-bits.js',
+            '_BaseCard.js',
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Settings/SystemAdminTools/_DatabaseReset.vue' => [
@@ -2498,9 +2521,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsHeader.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Settings/_AbandonedCartSettings.vue' => [
@@ -2510,17 +2533,17 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__InlineCheckbox.js',
             '__OptionSelector.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
-            '__FormBuilder2.js',
+            '__FormBuilder.js',
             '_fc-bits-ui.js',
             '_ItemCopier2.js',
             '_SettingsRow.js',
+            '_vendor.js',
             '_PhotoWidget.js',
-            '_input-popover-dropdown.js',
+            '_input-popover-dropdown2.js',
             '_data_config.js',
             '__AjaxSelector.js',
             '__VerifiedEmailInput.js'
@@ -2533,10 +2556,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_GenericPromo2.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_PromoCard.js'
         ]
@@ -2548,10 +2571,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
             '_SettingsRow.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -2562,11 +2585,11 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
             '_fc-bits-ui.js',
-            '_SettingsRow.js'
+            '_SettingsRow.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Settings/_ComplianceSettings.vue' => [
@@ -2576,10 +2599,10 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
             '_SettingsRow.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -2590,13 +2613,13 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '__FormBuilder.js',
+            '__FormBuilder2.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '__OptionSelector.js',
-            '_input-popover-dropdown2.js',
+            '_input-popover-dropdown.js',
             '_CustomIcon.js',
             '_data_config.js'
         ]
@@ -2608,15 +2631,15 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '__FormBuilder.js',
+            '__FormBuilder2.js',
             '__OptionSelector.js',
             '_ItemCopier2.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
             '_SettingsRow.js',
-            '_input-popover-dropdown2.js',
+            '_input-popover-dropdown.js',
             '_CustomIcon.js',
             '_data_config.js'
         ]
@@ -2628,9 +2651,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__InlineCheckbox.js',
             '__OptionSelector.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
@@ -2648,11 +2671,11 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '__OptionSelector.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Settings/_LicenseManagement.vue' => [
@@ -2662,8 +2685,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsHeader.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
@@ -2674,13 +2697,13 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             '_DataTable.js',
             '_fc-bits-ui.js',
             '_SettingsHeader.js',
             '_SettingsRow.js',
-            '_PromoCard.js'
+            '_PromoCard.js',
+            '_vendor.js'
         ],
         'assets' => [
             'crm_managers.png'
@@ -2693,28 +2716,29 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_SettingsHeader.js',
             '_SettingsRow.js',
             '_ItemCopier.js',
             '_BaseCard.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ]
     ],
-    'resources/v3app/src/Modules/Settings/_SMSSettings.vue' => [
-        'file' => 'v3app/src/Modules/Settings/_SMSSettings.js',
-        'name' => '_SMSSettings',
-        'src' => 'resources/v3app/src/Modules/Settings/_SMSSettings.vue',
+    'resources/v3app/src/Modules/Settings/_MessagingSettings.vue' => [
+        'file' => 'v3app/src/Modules/Settings/_MessagingSettings.js',
+        'name' => '_MessagingSettings',
+        'src' => 'resources/v3app/src/Modules/Settings/_MessagingSettings.vue',
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
-            '_fc-bits-ui.js',
             '_SettingsHeader.js',
             '_SaveButton.js',
             '_ItemCopier2.js',
             '_PromoCard.js',
-            '_SettingsRow.js'
+            '_SettingsRow.js',
+            '_BaseCard.js',
+            '_vendor.js',
+            '_fc-bits-ui.js'
         ],
         'assets' => [
             'sms_settings.png'
@@ -2727,9 +2751,9 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_ItemCopier2.js',
             '_SettingsHeader.js',
+            '_vendor.js',
             '_fc-bits-ui.js'
         ],
         'assets' => [
@@ -2743,11 +2767,11 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_PaginationBar.js',
             '_DataTable.js',
             '_SettingsHeader.js',
-            '_fc-bits-ui.js'
+            '_fc-bits-ui.js',
+            '_vendor.js'
         ]
     ],
     'resources/v3app/src/Modules/Settings/parts/CustomContactFields.vue' => [
@@ -2757,8 +2781,8 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_fc-bits-ui.js',
+            '_vendor.js',
             '_SettingsHeader.js',
             '_DataTable.js'
         ]
@@ -2781,12 +2805,12 @@
         'isDynamicEntry' => true,
         'imports' => [
             '_vendor-element-plus.js',
-            '_vendor.js',
             '_Confirm2.js',
             '_ActionMenu.js',
             '_PaginationBar.js',
             '_DataTable.js',
             '_FloatingBulkActionShell.js',
+            '_vendor.js',
             '_fc-bits-ui.js',
             '_PageHeader.js',
             '_Error.js',

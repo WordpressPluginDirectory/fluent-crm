@@ -30,4 +30,23 @@ class BasePolicy extends Policy
     {
         return PermissionManager::currentUserCan($permission);
     }
+
+    /**
+     * Get the routed REST method when WordPress has applied method override.
+     *
+     * @param Request $request
+     * @return string
+     */
+    protected function requestMethod(Request $request)
+    {
+        if (fluentCrm()->bound('wprestrequest')) {
+            $wpRestRequest = fluentCrm()->wprestrequest;
+
+            if ($wpRestRequest instanceof \WP_REST_Request) {
+                return $wpRestRequest->get_method();
+            }
+        }
+
+        return $request->method();
+    }
 }

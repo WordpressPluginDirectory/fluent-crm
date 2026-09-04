@@ -8,6 +8,7 @@ use FluentCart\App\Models\Customer;
 use FluentCart\App\Models\Order;
 use FluentCrm\App\Models\Subscriber;
 
+use FluentCrm\App\Services\ExternalIntegrations\FluentCart\Actions\CreateCouponAction;
 use FluentCrm\App\Services\ExternalIntegrations\FluentCart\Benchmarks\OrderSuccessBenchmark;
 use FluentCrm\App\Services\ExternalIntegrations\FluentCart\SmartCode\SmartCodeParser;
 use FluentCrm\App\Services\ExternalIntegrations\FluentCart\SmartCode\SmartCodeRegister;
@@ -36,7 +37,9 @@ class FluentCart
         SmartCodeRegister::push();
 
         (new RevenueTracker())->init();
-        (new CheckoutSubscription())->init();
+
+        (new CustomerWidget())->init();
+
     }
 
     public function addAutomations()
@@ -47,7 +50,7 @@ class FluentCart
         new OrderRefundedTrigger();
         new OrderCanceledTrigger();
 
-        // new OrderStatusChangedTrigger(); // Disabled for now as will be available in future
+        // new OrderStatusChangedTrigger();
         new SubscriptionExpiredTrigger();
 
         //subscription activated
@@ -62,6 +65,8 @@ class FluentCart
         //subscription end of term(completed)
         new SubscriptionEndOfTermTrigger();
 
+        // Actions
+        new CreateCouponAction();
 
         // Goals
         new OrderSuccessBenchmark();
@@ -76,12 +81,23 @@ class FluentCart
         add_filter('fluentcrm_ajax_options_fluent_cart_products', [$this, 'getProducts'], 10, 3);
         add_filter('fluentcrm_ajax_options_fluent_cart_product_categories', [$this, 'getProductCategories'], 10, 3);
         add_filter('fluentcrm_ajax_options_fluent_cart_subscription_products', [$this, 'getSubscriptionProducts'], 10, 3);
+        add_filter('fluentcrm_ajax_options_fluent_cart_coupons', [$this, 'getCoupons'], 10, 3);
+        add_filter('fluentcrm_ajax_options_fluent_cart_product_variations', [$this, 'getProductVariations'], 10, 3);
+
+        // Inject the per-contact dynamic coupon smartcode when a Create Coupon step is created.
+        add_action('fluent_crm/sequence_created_fcrm_create_fluentcart_coupon', function ($createdSequence) {
+            $settings = $createdSequence->settings;
+            $settings['code_settings']['smart_code'] = '{{cart_coupon.' . $createdSequence->funnel_id . '_' . $createdSequence->id . '}}';
+            $createdSequence->settings = $settings;
+            $createdSequence->save();
+        });
 
         add_filter('fluent_crm/funnel_icons', [$this, 'addCartIcon'], 10 , 1);
         add_filter('fluent_crm/purchase_history_fluent_cart', [$this, 'purchaseHistory'], 10, 2);
 
         add_filter('fluent_crm/smartcode_group_callback_cart_order', [SmartCodeParser::class, 'parseCartOrder'], 10, 4);
         add_filter('fluent_crm/smartcode_group_callback_cart_customer', [SmartCodeParser::class, 'parseCartCustomer'], 10, 4);
+        add_filter('fluent_crm/smartcode_group_callback_cart_coupon', [SmartCodeParser::class, 'parseCartCoupon'], 10, 4);
 //        add_filter('fluent_crm/smartcode_group_callback_cart_transaction', [SmartCodeParser::class, 'parseCartTransaction'], 10, 4);
         add_filter('fluent_crm/smartcode_group_callback_cart_receipt', [SmartCodeParser::class, 'parseCartReceipt'], 10, 4);
 
@@ -104,6 +120,16 @@ class FluentCart
     public function getSubscriptionProducts($items, $search, $ids)
     {
         return CartHelper::getFluentCartSubscriptionProducts($items, $search, $ids);
+    }
+
+    public function getCoupons($items, $search, $ids)
+    {
+        return CartHelper::getFluentCartCoupons($items, $search, $ids);
+    }
+
+    public function getProductVariations($items, $search, $ids)
+    {
+        return CartHelper::getFluentCartProductVariations($items, $search, $ids);
     }
 
     public function addCartIcon($icons)
@@ -270,7 +296,7 @@ class FluentCart
         $html .= '<h3 class="history_title">' . __('Purchased Products', 'fluent-crm') . '</h3>';
         $html .= '<div class="fc_history_widget"><ul class="fc_full_listed max_height_550">';
         foreach ($items as $item) {
-            $orderUrl = admin_url('admin.php?page=fluent-crm#/orders/' . $item['order_id'] . '/view');
+            $orderUrl = admin_url('admin.php?page=fluent-cart#/orders/' . $item['order_id'] . '/view');
             $badges = '<span class="el-tag el-tag--primary">' . esc_html(Helper::toDecimal($item['price'])) . '</span>';
             $badges .= '<span class="el-tag el-tag--primary"><a target="_blank" rel="noopener" href="' . esc_url($orderUrl) . '">' . date_i18n(get_option('date_format'), strtotime($item['created_at'])) . '</a></span>';
             $html .= '<li class="fc_product_name">' . esc_html($item['name']) . ' ' . $badges . '</li>';

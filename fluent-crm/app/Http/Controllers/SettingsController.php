@@ -26,6 +26,13 @@ use FluentCrm\Framework\Http\Request\Request;
  */
 class SettingsController extends Controller
 {
+    /**
+     * Number of campaigns returned to the Campaign Archive selector in one response,
+     * matching the archive's own 200-campaign ceiling. A caller may request fewer with
+     * an explicit limit, never more. Past this the selector relies on its search box.
+     */
+    const MAX_SELECTOR_CAMPAIGNS = 200;
+
     public function get(Request $request)
     {
         $existingSettings = get_option(FLUENTCRM . '-global-settings');
@@ -250,6 +257,12 @@ class SettingsController extends Controller
             ]);
         }
 
+        // Delegated CRM settings managers do not automatically receive WordPress'
+        // unfiltered HTML authority for a public confirmation page.
+        if (!current_user_can('unfiltered_html')) {
+            $settings['after_confirm_message'] = wp_kses_post($settings['after_confirm_message']);
+        }
+
         if ($listId) {
             fluentcrm_update_list_meta($listId, 'double_optin_settings', $settings);
             if ($globalDoubleOptin) {
@@ -343,80 +356,90 @@ class SettingsController extends Controller
             fluentcrm_update_option('_fc_bounce_key', $securityCode);
         }
 
+        $restNamespace = FluentCrm()->config->get('app.rest_namespace');
+        $bounceUrl = function ($provider) use ($restNamespace, $securityCode) {
+            return rest_url($restNamespace . '/v2/public/bounce_handler/' . $provider . '/handle/' . $securityCode);
+        };
+
         $bounceSettings = [
             'ses'          => [
                 'label'       => __('Amazon SES', 'fluent-crm'),
-                'webhook_url' => site_url('index.php?fluentcrm=1&route=bounce_handler&provider=ses&verify_key=' . $securityCode),
+                'webhook_url' => add_query_arg([
+                    FLUENTCRM_EXTERNAL_URL_PARAM => 1,
+                    'route'                      => 'bounce_handler',
+                    'provider'                   => 'ses',
+                    'verify_key'                 => $securityCode
+                ], site_url('index.php')),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handler-with-amazon-ses/',
                 'input_title' => __('Amazon SES Bounce Handler URL', 'fluent-crm'),
                 'input_info'  => __('Please use this bounce handler url in your Amazon SES + SNS settings', 'fluent-crm')
             ],
             'tosend'       => [
                 'label'       => __('ToSend', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/tosend/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('tosend'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-tosend/',
                 'input_title' => __('ToSend Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your ToSend\'s Webhook settings to enable Bounce Handling with FluentCRM. Select both Bounce and Complaint events.', 'fluent-crm')
             ],
             'mailgun'      => [
                 'label'       => __('Mailgun', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/mailgun/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('mailgun'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-mailgun/',
                 'input_title' => __('Mailgun Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your Mailgun\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
             ],
             'pepipost'     => [
                 'label'       => __('PepiPost', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/pepipost/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('pepipost'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-pepipost/',
                 'input_title' => __('PepiPost Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your PepiPost\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
             ],
             'postmark'     => [
                 'label'       => __('PostMark', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/postmark/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('postmark'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-postmark/',
                 'input_title' => __('PostMark Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your PostMark\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
             ],
             'sendgrid'     => [
                 'label'       => __('SendGrid', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/sendgrid/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('sendgrid'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-sendgrid/',
                 'input_title' => __('SendGrid Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your SendGrid\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
             ],
             'sparkpost'    => [
                 'label'       => __('SparkPost', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/sparkpost/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('sparkpost'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-sparkpost/',
                 'input_title' => __('SparkPost Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your SparkPost\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
             ],
             'elasticemail' => [
                 'label'       => __('Elastic Email', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/elasticemail/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('elasticemail'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-elastic-email/',
                 'input_title' => __('Elastic Email Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your Elastic Email\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
             ],
             'postalserver' => [
                 'label'       => __('Postal Server', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/postalserver/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('postalserver'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-postal-server/',
                 'input_title' => __('Postal Server Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your Postal Server\'s Webhook settings to enable Bounce Handling with FluentCRM. Please select only MessageBounced & MessageDeliveryFailed event', 'fluent-crm')
             ],
             'smtp2go'      => [
                 'label'       => __('SMTP2Go', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/smtp2go/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('smtp2go'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-smtp2go/',
                 'input_title' => __('SMTP2Go Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your SMTP2Go\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
             ],
             'brevo'        => [
                 'label'       => __('Brevo (ex Sendinblue)', 'fluent-crm'),
-                'webhook_url' => get_rest_url(null, 'fluent-crm/v2/public/bounce_handler/brevo/handle/' . $securityCode),
+                'webhook_url' => $bounceUrl('brevo'),
                 'doc_url'     => 'https://fluentcrm.com/docs/bounce-handling-with-brevo/',
                 'input_title' => __('Brevo Bounce Handler Webhook URL', 'fluent-crm'),
                 'input_info'  => __('Please paste this URL into your Brevo\'s Webhook settings to enable Bounce Handling with FluentCRM', 'fluent-crm')
@@ -688,7 +711,9 @@ class SettingsController extends Controller
         $selectedLogs = $data['selected_logs'];
         $daysBefore = $data['days_before'];
 
-        $refDate = gmdate('Y-m-d 00:00:01', time() - $daysBefore * 86400);
+        // Site-local cutoff: created_at is written with current_time(), so a UTC
+        // time() base deletes up to a site-offset's worth of extra (or fewer) rows.
+        $refDate = gmdate('Y-m-d 00:00:01', current_time('timestamp') - $daysBefore * 86400);
 
         $dataCounters = [];
         if (in_array('emails', $selectedLogs)) {
@@ -753,7 +778,8 @@ class SettingsController extends Controller
         $perChunk = 10000; // Deleting 10,000 per chunk
         $hasMore = false;
 
-        $refDate = gmdate('Y-m-d 00:00:01', time() - $daysBefore * 86400);
+        // Same site-local cutoff as the preview in getOldLogDetails().
+        $refDate = gmdate('Y-m-d 00:00:01', current_time('timestamp') - $daysBefore * 86400);
         if (in_array('emails', $selectedLogs)) {
 
             $campaignIds = CampaignEmail::where('created_at', '<', $refDate)
@@ -1164,16 +1190,94 @@ class SettingsController extends Controller
             \FluentCrmMigrations\ActivityLogsMigrator::migrate();
         }
 
+        // Merge over what is stored instead of replacing it. The option holds
+        // every experimental flag in one row, so a request carrying only some of
+        // them — a screen that owns a single switch, or a client whose GET failed
+        // and left it with an empty snapshot — would otherwise drop every flag it
+        // did not send, silently reverting those modules to their defaults.
+        // The raw option is merged rather than Helper::getExperimentalSettings()
+        // so that defaults and filtered values are not persisted as a side effect.
+        $stored = get_option('_fluentcrm_experimental_settings', []);
+
+        if (!$stored || !is_array($stored)) {
+            $stored = [];
+        }
+
+        $data = array_merge($stored, $data);
+
         update_option('_fluentcrm_experimental_settings', $data, 'yes');
+
+        /**
+         * Fires after the experimental module switches have been saved.
+         *
+         * The migrations above cover core's own modules. Modules that live in an
+         * add-on cannot be reached from here, so they hook this to create their
+         * tables when their switch has just been turned on.
+         *
+         * @since 3.1.12
+         *
+         * @param array $data The full settings as saved, which for a partial
+         *                    request includes the stored flags it did not carry.
+         */
+        do_action('fluent_crm/experimental_settings_saved', $data);
 
         return [
             'message' => __('Settings has been updated', 'fluent-crm')
         ];
     }
 
+    /**
+     * Campaign list for the Campaign Archive selector.
+     *
+     * Only the columns the selector renders are selected: whole campaign rows carry
+     * email_body (LONGTEXT), which made the payload ~33x larger than it needs to be.
+     *
+     * The list is bounded newest-first rather than returned whole, because the
+     * selector renders one DOM node per option — an unbounded list would degrade on a
+     * site with a long sending history. MAX_SELECTOR_CAMPAIGNS is both the default and
+     * the ceiling: an explicit $limit can only ask for fewer. Anything past that bound
+     * stays reachable through $searchBy, which the selector sends as the admin types.
+     *
+     * $includeIds are appended even when they fall outside the bound or the search, so
+     * campaigns already saved in the setting always resolve to a title instead of
+     * rendering as a bare numeric id. They are capped the same way, so they cannot be
+     * used to sidestep the bound.
+     */
     public function getCampaigns(Request $request)
     {
-        $campaigns = Campaign::orderBy('id', 'DESC')->get();
+        $columns = ['id', 'title', 'email_subject', 'status'];
+        $search = sanitize_text_field($request->get('searchBy', ''));
+        // Bounded like the page itself: without this cap a caller could bypass $limit
+        // entirely by naming every campaign here.
+        $includeIds = array_slice(
+            array_unique(array_filter(array_map('intval', (array) $request->get('include_ids', [])))),
+            0,
+            self::MAX_SELECTOR_CAMPAIGNS
+        );
+
+        // A caller-supplied limit may only narrow the page; anything absent, invalid
+        // or above the ceiling falls back to it, so the query stays bounded.
+        $limit = intval($request->get('limit', 0));
+        if ($limit <= 0 || $limit > self::MAX_SELECTOR_CAMPAIGNS) {
+            $limit = self::MAX_SELECTOR_CAMPAIGNS;
+        }
+
+        $campaigns = Campaign::select($columns)
+            ->when($search, function ($query) use ($search) {
+                // Escape LIKE wildcards (%, _) so the term matches literally.
+                global $wpdb;
+                return $query->where('title', 'LIKE', '%' . $wpdb->esc_like($search) . '%');
+            })
+            ->orderBy('id', 'DESC')
+            ->limit($limit)
+            ->get();
+
+        $missingIds = array_diff($includeIds, $campaigns->pluck('id')->toArray());
+        if ($missingIds) {
+            $campaigns = $campaigns->merge(
+                Campaign::select($columns)->whereIn('id', $missingIds)->get()
+            );
+        }
 
         return [
             'campaigns' => $campaigns

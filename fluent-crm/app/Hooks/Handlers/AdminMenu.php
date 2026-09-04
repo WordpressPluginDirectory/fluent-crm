@@ -152,6 +152,9 @@ class AdminMenu
                 array($this, 'render')
             );
 
+        }
+
+        if (in_array('fcrm_read_emails', $permissions) || in_array('fcrm_manage_email_templates', $permissions)) {
             add_submenu_page(
                 'fluentcrm-admin',
                 __('Email Templates', 'fluent-crm'),
@@ -320,14 +323,23 @@ class AdminMenu
         });
     }
 
+    /**
+     * Build capability-filtered FluentCRM navigation for the current user.
+     *
+     * @param string|null $urlBase
+     * @return array
+     */
     public function getMenuItems($urlBase = null)
     {
         if (!$urlBase) {
             $urlBase = fluentcrm_menu_url_base();
         }
 
-
         $permissions = PermissionManager::currentUserPermissions();
+
+        if(!$permissions) {
+            return [];
+        }
 
         $menuItems = [
             [
@@ -403,11 +415,14 @@ class AdminMenu
             $menuItems[] = $contactMenu;
         }
 
-        if (in_array('fcrm_read_emails', $permissions)) {
+        $canReadEmails = in_array('fcrm_read_emails', $permissions);
+        $canManageTemplates = in_array('fcrm_manage_email_templates', $permissions);
+
+        if ($canReadEmails || $canManageTemplates) {
             $campaignMenu = [
                 'key'          => 'campaigns',
                 'label'        => __('Emails', 'fluent-crm'),
-                'permalink'    => $urlBase . 'email/campaigns',
+                'permalink'    => $urlBase . ($canReadEmails ? 'email/campaigns' : 'email/templates'),
                 'layout_class' => 'fc_1_col_menu'
             ];
 
@@ -443,7 +458,7 @@ class AdminMenu
                     'key'         => 'email_templates',
                     'label'       => __('Templates', 'fluent-crm'),
                     'permalink'   => $urlBase . 'email/templates',
-                    'description' => __('Create email templates to use as a starting point in your emails', 'fluent-crm'),
+                    'description' => __('Browse reusable email templates for your emails', 'fluent-crm'),
                     'icon'        => '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M4.75 7H15.25V4.75H4.75V7ZM11.5 15.25V8.5H4.75V15.25H11.5ZM13 15.25H15.25V8.5H13V15.25ZM4 3.25H16C16.1989 3.25 16.3897 3.32902 16.5303 3.46967C16.671 3.61032 16.75 3.80109 16.75 4V16C16.75 16.1989 16.671 16.3897 16.5303 16.5303C16.3897 16.671 16.1989 16.75 16 16.75H4C3.80109 16.75 3.61032 16.671 3.46967 16.5303C3.32902 16.3897 3.25 16.1989 3.25 16V4C3.25 3.80109 3.32902 3.61032 3.46967 3.46967C3.61032 3.32902 3.80109 3.25 4 3.25V3.25Z" fill="currentColor"/>
                         </svg>'
@@ -467,6 +482,15 @@ class AdminMenu
                         </svg>'
                 ]
             ];
+
+            // Email readers may browse templates; template CRUD remains separately capability-scoped.
+            $campaignMenu['sub_items'] = array_values(array_filter($campaignMenu['sub_items'], function ($item) use ($canReadEmails, $canManageTemplates) {
+                if ($item['key'] === 'email_templates') {
+                    return $canReadEmails || $canManageTemplates;
+                }
+
+                return $canReadEmails;
+            }));
 
             $menuItems[] = $campaignMenu;
         }
@@ -497,6 +521,8 @@ class AdminMenu
          * @return array The filtered menu items.
          */
         $menuItems = apply_filters('fluent_crm/core_menu_items', $menuItems, $permissions, $urlBase);
+
+        // WhatsApp Menu — registered by Pro plugin via fluent_crm/core_menu_items filter
 
         if (in_array('fcrm_manage_settings', $permissions)) {
 
@@ -573,6 +599,40 @@ class AdminMenu
     {
         $this->unloadOtherScripts();
 
+        /*
+         * Printed here, inline, rather than on a later hook.
+         *
+         * An import map is honoured only if it precedes every module load or
+         * preload in the document; a browser that meets one afterwards rejects
+         * the map outright — Firefox says so in as many words:
+         *
+         *   Import maps are not allowed after a module load or preload has
+         *   started.
+         *
+         * Once rejected, every bare @fluentcrm/* specifier is unmapped and the
+         * addon bundles that import them die on load, which surfaces as blank
+         * addon screens while core's own screens are fine (core does not import
+         * those specifiers — it is the thing they point at).
+         *
+         * This used to run on admin_head at priority 0, which is early only
+         * among admin_head callbacks. WordPress prints the enqueued head
+         * scripts on admin_print_scripts, and admin-header.php fires that
+         * BEFORE admin_head — so any other plugin with a module script in the
+         * head already beat us, and whether the map survived came down to which
+         * plugins a site happened to have active.
+         *
+         * loadCssJs() runs from loadAssets() on admin_enqueue_scripts priority
+         * 1, which is the first action inside <head> and ahead of
+         * admin_print_styles, admin_print_scripts and admin_head alike. Nothing
+         * but WordPress's own inline classic script precedes it, so printing
+         * now is what actually guarantees the map comes first.
+         *
+         * The trade is that fluent_crm/module_import_map must be filtered by
+         * then. Nothing filters it today, and a plugin registering it at load
+         * time — the normal case — is registered long before this runs.
+         */
+        $this->printModuleImportMap();
+
         // Inject Vite client for HMR in development mode
         add_action('admin_head', function () {
             \FluentCrm\App\Vite::injectViteClient();
@@ -638,6 +698,93 @@ class AdminMenu
         });
 
         wp_localize_script('fluentcrm_admin_app_boot', 'fcAdmin', $this->getAdminVars());
+    }
+
+    /**
+     * Print the import map that lets addon plugins share core's Vue,
+     * Element Plus and UI-kit instances.
+     *
+     * Addons build their bundles with `vue` / `element-plus` marked external
+     * and rewritten to these bare specifiers, so nothing site-specific is
+     * baked into an addon's JS — the plugin folder name, the site URL and the
+     * cache-busting version all stay here, in PHP, where they are known.
+     *
+     * Sharing the instance is not an optimisation: Element Plus installs onto
+     * core's app instance and communicates through provide/inject, so a
+     * second Vue copy inside an addon bundle renders broken components.
+     *
+     * @return void
+     */
+    public function printModuleImportMap()
+    {
+        /**
+         * Bare specifiers addon plugins may import from core's admin bundle.
+         *
+         * @param array $imports Map of bare specifier => absolute asset URL.
+         */
+        $imports = apply_filters('fluent_crm/module_import_map', [
+            '@fluentcrm/vue'                => $this->sharedModuleUrl('admin/shared/vue.js'),
+            '@fluentcrm/element-plus'       => $this->sharedModuleUrl('admin/shared/element-plus.js'),
+            '@fluentcrm/element-plus-icons' => $this->sharedModuleUrl('admin/shared/element-plus-icons.js'),
+            '@fluentcrm/ui'                 => $this->sharedModuleUrl('admin/shared/ui.js'),
+        ]);
+
+        if (!$imports) {
+            return;
+        }
+
+        // Not wp_json_encode()'d into an attribute — this is element *content*,
+        // and the only escaping that matters is keeping "</script" out of it.
+        // JSON_HEX_TAG turns < and > into \u003C / \u003E, which is valid JSON
+        // and inert inside <script>.
+        $json = wp_json_encode(
+            ['imports' => $imports],
+            JSON_HEX_TAG | JSON_UNESCAPED_SLASHES
+        );
+
+        echo '<script type="importmap">' . $json . '</script>' . "\n";
+    }
+
+    /**
+     * Cache-busted URL for one of the addon-facing shared entries.
+     *
+     * A shared entry and the chunks it imports must be served as ONE cache
+     * generation. Their internal imports are stamped with ?ver=PLUGIN_VERSION
+     * at build time by chunkCacheBustPlugin (vite.config.mjs); the import map
+     * URL is the only edge in that graph PHP emits, so without the same stamp
+     * it is the one unversioned edge. A browser could then pair a fresh
+     * admin/shared/element-plus.js with a cached vendor-element-plus.js — or
+     * the reverse, since vendor-element-plus.js is overwritten in place on
+     * every release, so a stale ?ver= request is answered with the new body.
+     * Either pairing crosses builds, and the mangled cross-chunk symbol names
+     * do not survive that:
+     *
+     *     SyntaxError: The requested module '../../vendor-element-plus.js?ver=X'
+     *     does not provide an export named 'eD'
+     *
+     * Stamped unconditionally, not just in production: `env => dev` with no
+     * Vite server running still resolves through the manifest to built assets,
+     * which is exactly when the stamp matters. Harmless when the dev server IS
+     * running — verified against Vite 5.4: the query reaches the module id (it
+     * shows up in the sourcemap `sources`) but not resolution, so both the bare
+     * and the stamped URL re-export from the same optimised dep
+     * (/node_modules/.vite/deps/element-plus.js?v=…) and there is still exactly
+     * one Element Plus instance.
+     *
+     * Safe against the 3.0.5 double-instance rule because nothing inside core
+     * imports these entries, making the import map their only URL —
+     * dev/audit-entry-exports.js pins maxStaticImporters and
+     * maxDynamicImporters to 0 on all four to keep that true.
+     *
+     * Applied before the `fluent_crm/module_import_map` filter, so a third
+     * party adding its own specifier owns its own cache-busting.
+     *
+     * @param string $asset Asset path relative to the build output root.
+     * @return string
+     */
+    private function sharedModuleUrl($asset)
+    {
+        return add_query_arg('ver', $this->version, fluentCrmMix($asset));
     }
 
     public function getAdminVars()
@@ -838,12 +985,44 @@ class AdminMenu
             'available_funnel_label_colors'       => Helper::funnelLabelColors(),
             'available_contact_statuses'          => fluentcrm_subscriber_statuses(true),
             'available_contact_editable_statuses' => fluentcrm_subscriber_editable_statuses(true),
-            'available_sms_statuses'              => fluentcrm_subscriber_sms_statuses(true),
+            // Free ships the flag off; the Pro Messaging module overrides both of
+            // these through the fluent_crm/admin_vars filter when the channel is on.
+            'whatsapp_enabled'                    => 'no',
+            'whatsapp_provider'                   => '',
             'available_contact_types'             => fluentcrm_contact_types(true),
             'available_custom_fields'             => fluentcrm_get_option('contact_custom_fields', []),
             'contact_sample_csv'                  => fluentCrmMix('sample.csv'),
             'global_email_footer'                 => Helper::getEmailFooterContent(),
             'experimentals'                       => Helper::getExperimentalSettings(),
+            /**
+             * Notices shown in the app's global bar, under the top menu.
+             *
+             * The one place anything — core or an add-on — can put a message in
+             * front of every screen without owning a component. Each notice is:
+             *
+             *   id          string, unique; also the dismissal key
+             *   type        info | warning | success | error
+             *   title       short line, optional
+             *   message     the body; plain text
+             *   dismissible bool, default false — a notice the admin must act on
+             *               should not be dismissible
+             *   action      optional [
+             *                   label   button text
+             *                   route   REST route, relative to the CRM namespace
+             *                   method  POST (default) | GET
+             *                   batched bool — keep calling the route until the
+             *                           response says {"done": true}, showing
+             *                           {"progress": {"current", "total"}}
+             *                   running_label  text while it runs
+             *                   done_message   text when it finishes
+             *               ]
+             *
+             * Delivered in admin vars rather than fetched, so a site with no
+             * notices costs no extra request.
+             *
+             * @param array $notices
+             */
+            'global_notices'                      => array_values((array) apply_filters('fluent_crm/global_notices', [])),
             'publicPostTypes'                     => $formattedPostTypes,
             'has_woo'                             => defined('WC_PLUGIN_FILE'),
             'debugs'                              => [

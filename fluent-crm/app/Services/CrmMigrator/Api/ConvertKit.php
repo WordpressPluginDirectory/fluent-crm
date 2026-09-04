@@ -45,13 +45,13 @@ class ConvertKit
                         'Content-Type' => 'application/json'
                     ]
                 );
-				$response = wp_remote_post( $this->apiUrl.$action.'?api_key='.$this->apiKey, $args );
+				$response = wp_safe_remote_post( $this->apiUrl.$action.'?api_key='.$this->apiKey, $args );
 				break;
 
 			case 'GET':
                 /* Build request URL. */
                 $request_url = $this->apiUrl  . $action.'?' . $options_string;
-				$response = wp_remote_get( $request_url );
+				$response = wp_safe_remote_get( $request_url );
 				break;
 		}
 

@@ -8,6 +8,7 @@
 
 namespace FluentCrm\App\Http\Controllers;
 
+use FluentCrm\App\Services\Helper;
 use FluentCrm\Framework\Http\Request\Request;
 use FluentCrm\Framework\Support\Arr;
 
@@ -24,13 +25,16 @@ class SetupController extends Controller
 {
     public function CompleteWizard(Request $request)
     {
-        $installFluentForm = $request->get('install_fluentform', 'no');
+        // Read through Helper so this and SettingsPolicy::CompleteWizard() — the
+        // gate that requires install_plugins for exactly these flags — can never
+        // disagree about which requests install a plugin.
+        $installFlags = Helper::getWizardPluginInstallFlags($request);
 
-        if ($installFluentForm == 'yes' && !defined('FLUENTFORM')) {
+        if ($installFlags['fluentform'] && !defined('FLUENTFORM')) {
             $this->installFluentForm();
         }
 
-        if ($request->get('install_fluentcart', 'no') === 'yes' && !defined('FLUENTCART_VERSION')) {
+        if ($installFlags['fluentcart'] && !defined('FLUENTCART_VERSION')) {
             $this->installFluentCart();
         }
 
@@ -263,6 +267,17 @@ class SetupController extends Controller
 
     private function backgroundInstaller($plugin_to_install, $plugin_id)
     {
+        /*
+         * Every route that reaches this point is already gated — SettingsPolicy
+         * requires install_plugins for the install routes and for the wizard's
+         * install flags, and the handlers above re-check it. This is the last
+         * choke point all six installers share, so it re-asserts the capability
+         * rather than trusting each caller to have done it.
+         */
+        if (!current_user_can('install_plugins')) {
+            return;
+        }
+
         if (!empty($plugin_to_install['repo-slug'])) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
             require_once ABSPATH . 'wp-admin/includes/plugin-install.php';

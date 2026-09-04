@@ -14,15 +14,16 @@ class AiController extends Controller
     private $writingSettingsOptionKey = '_ai_writing_settings';
     private $providerModels = [
         'wordpress' => ['wordpress'],
-        'open_ai' => ['auto', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini'],
-        'claude'  => ['auto', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'],
-        'gemini'  => ['auto', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'],
+        'open_ai' => ['auto', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini'],
+        'claude'  => ['auto', 'claude-sonnet-5', 'claude-opus-5', 'claude-haiku-4-5-20251001', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-opus-4-6'],
+        'gemini'  => ['auto', 'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'],
+        'openrouter' => [],
     ];
 
     private $autoProviderModels = [
-        'open_ai' => 'gpt-5.4',
-        'claude'  => 'claude-sonnet-4-6',
-        'gemini'  => 'gemini-3.5-flash',
+        'open_ai' => 'gpt-5.6-terra',
+        'claude'  => 'claude-sonnet-5',
+        'gemini'  => 'gemini-3.6-flash',
         'wordpress' => 'wordpress',
     ];
 
@@ -113,6 +114,7 @@ class AiController extends Controller
     {
         $data = $request->get('settings', []);
         $provider = $this->normalizeProvider(sanitize_text_field(Arr::get($data, 'provider', '')));
+        $apiKey = sanitize_text_field(Arr::get($data, 'api_key', ''));
 
         $validProviders = array_keys($this->providerModels);
         if (!$provider || !in_array($provider, $validProviders, true)) {
@@ -121,9 +123,28 @@ class AiController extends Controller
             ], 422);
         }
 
-        return $this->sendSuccess([
-            'models' => $this->formatModelOptions($provider),
-        ]);
+        if ($provider === 'openrouter') {
+            if (!$apiKey || strpos($apiKey, '****') === 0) {
+                $apiKey = Arr::get($this->getSavedCredentials(), 'api_key', '');
+            }
+
+            if (!$apiKey) {
+                return $this->sendError([
+                    'message' => __('Please enter an OpenRouter API key first.', 'fluent-crm'),
+                ], 422);
+            }
+
+            $models = $this->getOpenRouterModels($apiKey);
+            if (is_wp_error($models)) {
+                return $this->sendError([
+                    'message' => $models->get_error_message(),
+                ], 422);
+            }
+
+            return $this->sendSuccess(['models' => $models]);
+        }
+
+        return $this->sendSuccess(['models' => $this->formatModelOptions($provider)]);
     }
 
     public function testConnection(Request $request)
@@ -851,14 +872,19 @@ class AiController extends Controller
             }
 
             $data = apply_filters('fluent_crm/purchase_history_' . $providerKey, [
-                'orders' => [],
-                'total'  => 0,
+                'data'  => [],
+                'total' => 0,
             ], $subscriber);
+
+            // Every core producer (FluentCart, Woo, EDD, Paymattic, PMPro)
+            // returns rows under 'data'; only the legacy REST seed used
+            // 'orders'. Reading 'orders' alone left this context empty.
+            $orders = Arr::get($data, 'data', []) ?: Arr::get($data, 'orders', []);
 
             $providers[$providerKey] = [
                 'title'  => sanitize_text_field(Arr::get($provider, 'title', $providerKey)),
                 'total'  => intval(Arr::get($data, 'total', 0)),
-                'orders' => $this->normalizeSummaryRows(Arr::get($data, 'orders', []), 10),
+                'orders' => $this->normalizeSummaryRows($orders, 10),
             ];
         }
 
@@ -949,6 +975,8 @@ class AiController extends Controller
                 return $this->callClaude($model, $apiKey, $userPrompt, $systemPrompt, $timeout);
             case 'gemini':
                 return $this->callGemini($model, $apiKey, $userPrompt, $systemPrompt, $timeout);
+            case 'openrouter':
+                return $this->callOpenRouter($model, $apiKey, $userPrompt, $systemPrompt, $timeout);
             case 'wordpress':
                 return $this->callWordPress($model, $userPrompt, $systemPrompt, $timeout);
             default:
@@ -1119,6 +1147,45 @@ class AiController extends Controller
         return $content;
     }
 
+    private function callOpenRouter($model, $apiKey, $userPrompt, $systemPrompt, $timeout)
+    {
+        $messages = [];
+        if ($systemPrompt) {
+            $messages[] = ['role' => 'system', 'content' => $systemPrompt];
+        }
+        $messages[] = ['role' => 'user', 'content' => $userPrompt];
+
+        $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', [
+            'timeout' => $timeout,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $apiKey,
+                'Content-Type'  => 'application/json',
+            ],
+            'body' => wp_json_encode([
+                'model'                 => $model,
+                'messages'              => $messages,
+                'max_completion_tokens' => 2048,
+            ]),
+        ]);
+
+        if (is_wp_error($response)) {
+            return new \WP_Error('api_error', __('Failed to connect to OpenRouter: ', 'fluent-crm') . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if ($code !== 200) {
+            return new \WP_Error('api_error', Arr::get($body, 'error.message', __('Unknown error from OpenRouter.', 'fluent-crm')));
+        }
+
+        $content = Arr::get($body, 'choices.0.message.content', '');
+        if (empty($content)) {
+            return new \WP_Error('empty_response', __('No content generated. Please try again.', 'fluent-crm'));
+        }
+
+        return $content;
+    }
+
     private function getSavedSettings()
     {
         $defaults = [
@@ -1201,6 +1268,43 @@ class AiController extends Controller
                 'value' => $model,
                 'label' => $model === 'auto' ? __('Auto', 'fluent-crm') : $model,
             ];
+        }
+
+        return $models;
+    }
+
+    private function getOpenRouterModels($apiKey)
+    {
+        $response = wp_remote_get('https://openrouter.ai/api/v1/models?output_modalities=text', [
+            'timeout' => 15,
+            'headers' => ['Authorization' => 'Bearer ' . $apiKey],
+        ]);
+
+        if (is_wp_error($response)) {
+            return new \WP_Error('api_error', __('Failed to load OpenRouter models: ', 'fluent-crm') . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if ($code !== 200) {
+            return new \WP_Error('api_error', Arr::get($body, 'error.message', __('Could not load OpenRouter models.', 'fluent-crm')));
+        }
+
+        $models = [];
+        foreach ((array) Arr::get($body, 'data', []) as $model) {
+            $id = sanitize_text_field(Arr::get($model, 'id', ''));
+            if (!$id) {
+                continue;
+            }
+
+            $models[] = [
+                'value' => $id,
+                'label' => sanitize_text_field(Arr::get($model, 'name', $id)),
+            ];
+        }
+
+        if (!$models) {
+            return new \WP_Error('empty_models', __('OpenRouter returned no text models for this API key.', 'fluent-crm'));
         }
 
         return $models;

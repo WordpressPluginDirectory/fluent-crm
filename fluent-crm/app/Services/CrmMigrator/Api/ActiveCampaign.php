@@ -50,11 +50,11 @@ class ActiveCampaign
                     'body' => $options,
                     'timeout' => 30
                 );
-                $response = wp_remote_post($request_url, $args);
+                $response = wp_safe_remote_post($request_url, $args);
                 break;
 
             case 'GET':
-                $response = wp_remote_get($request_url, [
+                $response = wp_safe_remote_get($request_url, [
                     'timeout' => 30
                 ]);
                 break;
@@ -84,7 +84,7 @@ class ActiveCampaign
         $request_url = untrailingslashit($this->apiUrl) . '/admin/api.php?' . $request_options;
 
         /* Execute request. */
-        $response = wp_remote_get($request_url);
+        $response = wp_safe_remote_get($request_url);
 
         $error = $this->maybeError($response);
         if ($error) {

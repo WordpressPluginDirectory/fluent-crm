@@ -4,7 +4,7 @@
  * Plugin Name:  FluentCRM - Marketing Automation For WordPress
  * Plugin URI:   https://fluentcrm.com
  * Description:  CRM and Email Newsletter Plugin for WordPress
- * Version:      3.1.6
+ * Version:      3.2.0
  * Author:       WP Email Newsletter Team - FluentCRM
  * Author URI:   https://fluentcrm.com
  * License:      GPLv2 or later
@@ -20,11 +20,22 @@ if (defined('FLUENTCRM')) {
 define('FLUENTCRM', 'fluentcrm');
 define('FLUENTCRM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('FLUENTCRM_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('FLUENTCRM_PLUGIN_VERSION', '3.1.6');
-define('FLUENTCRM_MIN_PRO_VERSION', '3.1.6');;
+define('FLUENTCRM_PLUGIN_VERSION', '3.2.0');
+define('FLUENTCRM_MIN_PRO_VERSION', '3.2.0');;
 define('FLUENTCRM_FRAMEWORK_VERSION', 4);
 
-define('FLUENTCRM_DB_VERSION', '2.10.10');
+/**
+ * Version of the admin-app module contract that addon plugins build against:
+ * the bare specifiers in the import map (AdminMenu::printModuleImportMap()),
+ * the exports of resources/admin/shared/ui.js, and the JS filters an addon may
+ * hook. Addons must gate their admin-app enqueue on this constant so a core
+ * downgrade skips their UI instead of white-screening the admin.
+ *
+ * Bump only for a breaking change to that surface.
+ */
+define('FLUENTCRM_MODULE_API', 2);
+
+define('FLUENTCRM_DB_VERSION', '2.10.30');
 
 define('FLUENTCRM_CORE_FRAMEWORK_VERSION', 3);
  
@@ -33,6 +44,10 @@ define('FC_TEMPLATE_API_DOMAIN', 'https://fluentcrm.com');
 
 if (!defined('FLUENTCRM_UPLOAD_DIR')) {
     define('FLUENTCRM_UPLOAD_DIR', '/fluentcrm');
+}
+
+if (!defined('FLUENTCRM_EXTERNAL_URL_PARAM')) {
+    define('FLUENTCRM_EXTERNAL_URL_PARAM', 'fluentcrm');
 }
 
 require __DIR__ . '/vendor/autoload.php';

@@ -30,7 +30,9 @@ class Sanitize
 
         foreach ($data as $key => $value) {
             if ($value && isset($fieldMaps[$key]) && !is_array($value)) {
-                $data[$key] = call_user_func($fieldMaps[$key], $value);
+                $data[$key] = self::stripControlCharacters(
+                    call_user_func($fieldMaps[$key], $value)
+                );
             }
         }
 
@@ -114,6 +116,44 @@ class Sanitize
         return wp_kses($footerHtml, $allowedTags);
     }
 
+    /**
+     * Remove control characters that WordPress's sanitizers let through.
+     *
+     * sanitize_text_field() folds tab, newline and carriage return into spaces
+     * but leaves the remaining C0 controls — including NUL — untouched, so a
+     * value like "before\0after" round-trips through the API intact. A NUL byte
+     * truncates C-string comparisons, corrupts CSV and JSON exports, and can
+     * split a value differently in PHP than in MySQL.
+     *
+     * Tab, newline and carriage return are deliberately preserved: they are
+     * legitimate inside the multi-line fields that route through wp_kses_post
+     * rather than sanitize_text_field, and stripping them there would damage
+     * real content.
+     *
+     * The pattern is intentionally **not** /u. These are all single-byte ASCII
+     * controls, a bytewise replace cannot corrupt a multi-byte sequence (UTF-8
+     * continuation bytes are all >= 0x80), and the /u modifier would make
+     * preg_replace() return null for input that is not already valid UTF-8.
+     *
+     * @param mixed $value Scalar or nested array; anything else is returned as-is.
+     * @return mixed
+     */
+    private static function stripControlCharacters($value)
+    {
+        if (is_array($value)) {
+            return array_map([__CLASS__, 'stripControlCharacters'], $value);
+        }
+
+        if (!is_string($value) || $value === '') {
+            return $value;
+        }
+
+        $stripped = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
+
+        // preg_replace() returns null on failure; never silently drop the value.
+        return $stripped === null ? $value : $stripped;
+    }
+
     public static function contact($data)
     {
         $fieldMaps = [
@@ -149,7 +189,9 @@ class Sanitize
 
         foreach ($data as $key => $value) {
             if ($value && isset($fieldMaps[$key]) && !is_array($value)) {
-                $data[$key] = call_user_func($fieldMaps[$key], $value);
+                $data[$key] = self::stripControlCharacters(
+                    call_user_func($fieldMaps[$key], $value)
+                );
             }
         }
 
@@ -160,7 +202,124 @@ class Sanitize
             }
         }
 
+        if (isset($data['contact_type'])) {
+            if (!array_key_exists($data['contact_type'], fluentcrm_contact_types())) {
+                unset($data['contact_type']);
+            }
+        }
+
         return $data;
+    }
+
+    /**
+     * Sanitize custom contact field values before they are persisted.
+     *
+     * Custom fields are stored as free-form meta rows rather than mapped columns,
+     * so self::contact() cannot cover them from a static field map — the set of
+     * keys is defined by the site owner at runtime. The field's own configured
+     * type decides the rule instead:
+     *
+     *   - textarea            wp_kses_post, matching contactNote()'s description,
+     *                         so multi-line fields keep safe formatting HTML
+     *   - number              numeric cast, preserving int vs float
+     *   - checkbox / *-select array of sanitize_text_field
+     *   - everything else     sanitize_text_field
+     *
+     * A key with no matching field definition is treated as text. Unregistered
+     * keys are still written (integrations rely on ad-hoc keys), but an unknown
+     * key is never a reason to trust the value.
+     *
+     * @param array $values slug => value, as submitted
+     * @param array $fields optional pre-loaded field definitions keyed by slug,
+     *                      to avoid re-reading the option in a loop
+     * @return array sanitized values, keys preserved
+     */
+    public static function contactCustomValues($values, $fields = [])
+    {
+        return self::customFieldValues($values, 'contact_custom_fields', $fields);
+    }
+
+    /**
+     * Sanitize custom company field values before they are persisted.
+     *
+     * Same rules and the same reasoning as self::contactCustomValues() — only the
+     * option holding the field definitions differs. Company custom values live in
+     * the serialized `meta` column instead of their own rows, and every write path
+     * (REST create/update, CSV import, the public Companies API) reaches them
+     * through Api\Classes\Companies::createOrUpdate(), which is where this runs.
+     *
+     * @param array $values slug => value, as submitted
+     * @param array $fields optional pre-loaded field definitions keyed by slug
+     * @return array sanitized values, keys preserved
+     */
+    public static function companyCustomValues($values, $fields = [])
+    {
+        return self::customFieldValues($values, 'company_custom_fields', $fields);
+    }
+
+    /**
+     * Shared implementation behind the contact and company custom-value sanitizers.
+     *
+     * @param array  $values     slug => value, as submitted
+     * @param string $optionName fluentcrm option holding the field definitions
+     * @param array  $fields     optional pre-loaded definitions keyed by slug
+     * @return array
+     */
+    protected static function customFieldValues($values, $optionName, $fields = [])
+    {
+        if (!$values || !is_array($values)) {
+            return $values;
+        }
+
+        if (!$fields) {
+            foreach ((array)fluentcrm_get_option($optionName, []) as $field) {
+                if (!empty($field['slug'])) {
+                    $fields[$field['slug']] = $field;
+                }
+            }
+        }
+
+        $sanitized = [];
+
+        foreach ($values as $key => $value) {
+            $key = sanitize_text_field($key);
+            $type = Arr::get($fields, $key . '.type', 'text');
+
+            if (is_array($value)) {
+                // checkbox and multi-select arrive as arrays; the values are
+                // choice labels, so plain text is always correct here.
+                $sanitized[$key] = array_values(array_map(function ($item) {
+                    return is_scalar($item) ? sanitize_text_field($item) : '';
+                }, $value));
+                continue;
+            }
+
+            if (!is_scalar($value) && $value !== null) {
+                // Objects/resources have no valid representation in a meta value.
+                $sanitized[$key] = '';
+                continue;
+            }
+
+            $value = (string)$value;
+
+            if ($type === 'textarea') {
+                $sanitized[$key] = wp_kses_post($value);
+                continue;
+            }
+
+            if ($type === 'number') {
+                $sanitized[$key] = ($value === '') ? '' : $value + 0;
+                continue;
+            }
+
+            $sanitized[$key] = sanitize_text_field($value);
+        }
+
+        // Custom values reach the same sanitizers as the mapped columns, so they
+        // inherit the same control-character gap. Applied once over the finished
+        // set rather than at each branch above; the helper recurses into the
+        // array values that checkbox and multi-select fields produce.
+        return self::stripControlCharacters($sanitized);
     }
 
     public static function contactNote($data)
@@ -178,7 +337,9 @@ class Sanitize
 
         foreach ($data as $key => $value) {
             if ($value && isset($fieldMaps[$key]) && !is_array($value)) {
-                $data[$key] = call_user_func($fieldMaps[$key], $value);
+                $data[$key] = self::stripControlCharacters(
+                    call_user_func($fieldMaps[$key], $value)
+                );
             }
         }
 
@@ -198,7 +359,9 @@ class Sanitize
 
         foreach ($data as $key => $value) {
             if ($value && isset($fieldMaps[$key]) && !is_array($value)) {
-                $data[$key] = call_user_func($fieldMaps[$key], $value);
+                $data[$key] = self::stripControlCharacters(
+                    call_user_func($fieldMaps[$key], $value)
+                );
             }
         }
 
@@ -231,7 +394,9 @@ class Sanitize
 
         foreach ($data as $key => $value) {
             if ($value && isset($fieldMaps[$key]) && !is_array($value)) {
-                $data[$key] = call_user_func($fieldMaps[$key], $value);
+                $data[$key] = self::stripControlCharacters(
+                    call_user_func($fieldMaps[$key], $value)
+                );
             }
         }
 
@@ -355,7 +520,7 @@ class Sanitize
             ]);
 
             $listIds[] = $list->id;
-            do_action('fluent_crm/list_created', $listIds);
+            do_action('fluent_crm/list_created', $list);
         }
 
         return $listIds;

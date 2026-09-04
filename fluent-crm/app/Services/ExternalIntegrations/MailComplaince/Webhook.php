@@ -586,14 +586,28 @@ class Webhook
             return false;
         }
 
+        // ToSend sends the bounce event as `bounced` (past tense); `bounce` is kept
+        // for tolerance in case a flat/legacy payload is posted to this endpoint.
         $eventType = Arr::get($event, 'type');
-        if (!in_array($eventType, ['bounce', 'complaint'])) {
+        if (!in_array($eventType, ['bounce', 'bounced', 'complaint'])) {
             return false;
         }
 
-        $email = Arr::get($event, 'email');
+        // ToSend nests the event fields under `data`: {type, data: {...}, created_at}.
+        // Fall back to the top level so a flat payload still resolves.
+        $data = Arr::get($event, 'data');
+        if (!$data || !is_array($data)) {
+            $data = $event;
+        }
+
+        $email = Arr::get($data, 'email');
         if (!$email) {
             return false;
+        }
+
+        // Tolerate a "Display Name <addr>" recipient; ExternalPages matches on a bare address.
+        if (strpos($email, '<') !== false && preg_match('/<([^>]+)>/', $email, $matches)) {
+            $email = trim($matches[1]);
         }
 
         $externalPages = new ExternalPages();
@@ -607,15 +621,15 @@ class Webhook
         }
 
         // Bounce event — check is_hard_bounce flag
-        $reason = Arr::get($event, 'reason', 'Unknown');
-        $isHardBounce = Arr::get($event, 'is_hard_bounce', false);
+        $reason = Arr::get($data, 'reason', 'Unknown');
+        $isHardBounce = Arr::get($data, 'is_hard_bounce', false);
 
         // Sender-fault bounces (our content/message, not the recipient's mailbox) —
         // do NOT penalise the subscriber. Prefer the explicit `sender_fault` flag;
         // fall back to `bounce_sub_type` for older payloads.
         $senderFaultSubTypes = ['MessageTooLarge', 'ContentRejected', 'AttachmentRejected'];
-        $isSenderFault = (bool) Arr::get($event, 'sender_fault', false)
-            || (!$isHardBounce && in_array(Arr::get($event, 'bounce_sub_type'), $senderFaultSubTypes, true));
+        $isSenderFault = (bool) Arr::get($data, 'sender_fault', false)
+            || (!$isHardBounce && in_array(Arr::get($data, 'bounce_sub_type'), $senderFaultSubTypes, true));
 
         if ($isSenderFault) {
             return true;

@@ -21,14 +21,24 @@ class SequencePoints
 
     private $funnelSubscriber;
 
+    private $sequenceCursorId = null;
+
     private $nextSequenceExecutionTime = false;
 
     public $hasEndSequence = false;
 
-    public function __construct($funnel, $funnelSubscriber = false)
+    /**
+     * Resolve executable sequences from persisted subscriber state or a temporary traversal cursor.
+     *
+     * @param \FluentCrm\App\Models\Funnel $funnel
+     * @param \FluentCrm\App\Models\FunnelSubscriber|false $funnelSubscriber
+     * @param int|null $sequenceCursorId Non-persistent sequence used only to resolve the next step.
+     */
+    public function __construct($funnel, $funnelSubscriber = false, $sequenceCursorId = null)
     {
         $this->funnel = $funnel;
         $this->funnelSubscriber = $funnelSubscriber;
+        $this->sequenceCursorId = $sequenceCursorId;
         $this->setupData();
     }
 
@@ -57,10 +67,18 @@ class SequencePoints
         }
     }
 
+    /**
+     * Resolve the sequence used for traversal without changing persisted reporting state.
+     */
     private function resolveLastSequence()
     {
-        if ($this->funnelSubscriber && $this->funnelSubscriber->last_sequence_id) {
-            $this->lastSequence = FunnelSequence::where('id', $this->funnelSubscriber->last_sequence_id)->first();
+        $lastSequenceId = $this->sequenceCursorId;
+        if (!$lastSequenceId && $this->funnelSubscriber) {
+            $lastSequenceId = $this->funnelSubscriber->last_sequence_id;
+        }
+
+        if ($lastSequenceId) {
+            $this->lastSequence = FunnelSequence::where('id', $lastSequenceId)->first();
         }
     }
 
@@ -258,8 +276,11 @@ class SequencePoints
         return $this->requiredBenchMark;
     }
 
+    /**
+     * Determine whether the resolver found immediate, required, or scheduled work.
+     */
     public function hasSequences()
     {
-        return !!$this->requiredBenchMark || !!$this->immediateSequences;
+        return !!$this->requiredBenchMark || !!$this->immediateSequences || !!$this->nextSequence;
     }
 }

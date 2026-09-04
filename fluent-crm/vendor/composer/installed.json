@@ -48,24 +48,24 @@
         },
         {
             "name": "wpfluent/framework",
-            "version": "2.11.17",
-            "version_normalized": "2.11.17.0",
+            "version": "2.12.6",
+            "version_normalized": "2.12.6.0",
             "source": {
                 "type": "git",
                 "url": "git@github.com:wpfluent/framework2x.git",
-                "reference": "d3117998519c0b65afd90811848da43f69821513"
+                "reference": "391d4d9657e3d60c718b0f0203de272fdd9945f6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/wpfluent/framework2x/zipball/d3117998519c0b65afd90811848da43f69821513",
-                "reference": "d3117998519c0b65afd90811848da43f69821513",
+                "url": "https://api.github.com/repos/wpfluent/framework2x/zipball/391d4d9657e3d60c718b0f0203de272fdd9945f6",
+                "reference": "391d4d9657e3d60c718b0f0203de272fdd9945f6",
                 "shasum": ""
             },
             "require": {
                 "ext-json": "*",
-                "php": "^7.3|^8.0"
+                "php": "^7.4|^8.0"
             },
-            "time": "2026-04-20T20:51:03+00:00",
+            "time": "2026-07-30T16:13:44+00:00",
             "type": "library",
             "extra": {
                 "branch-alias": {
@@ -76,7 +76,10 @@
             "autoload": {
                 "psr-4": {
                     "FluentCrm\\Framework\\": "src/WPFluent"
-                }
+                },
+                "files": [
+                    "src/WPFluent/Support/mbstring-loader.php"
+                ]
             },
             "license": [
                 "MIT"
@@ -89,7 +92,7 @@
             ],
             "description": "A lightweight rest api based framework to build WordPress plugins.",
             "support": {
-                "source": "https://github.com/wpfluent/framework2x/tree/2.11.17",
+                "source": "https://github.com/wpfluent/framework2x/tree/2.12.6",
                 "issues": "https://github.com/wpfluent/framework2x/issues"
             },
             "install-path": "../wpfluent/framework"

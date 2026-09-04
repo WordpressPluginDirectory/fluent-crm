@@ -112,7 +112,10 @@ class FluentBlockEditorHandler
 
         // REST route for autosave
         add_action('rest_api_init', function () {
-            register_rest_route('fluent-crm/v1', '/editor-autosave', [
+            $ns = FluentCrm()->config->get('app.rest_namespace');
+            $restNamespace = $ns . '/v2';
+
+            register_rest_route($ns . '/v1', '/editor-autosave', [
                 'methods'             => 'POST',
                 'callback'            => [$this, 'handleEditorAutosave'],
                 'permission_callback' => function () {
@@ -121,7 +124,7 @@ class FluentBlockEditorHandler
                 }
             ]);
 
-            register_rest_route('fluent-crm/v2', '/editor/cart-products', [
+            register_rest_route($restNamespace, '/editor/cart-products', [
                 'methods'             => 'GET',
                 'callback'            => [$this, 'handleCartProductsListing'],
                 'permission_callback' => function () {
@@ -134,31 +137,31 @@ class FluentBlockEditorHandler
                 return is_user_logged_in() && PermissionManager::currentUserCan('fcrm_manage_email_templates');
             };
 
-            register_rest_route('fluent-crm/v2', '/editor-patterns', [
+            register_rest_route($restNamespace, '/editor-patterns', [
                 'methods'             => \WP_REST_Server::READABLE,
                 'callback'            => [$this, 'handleEditorPatternsList'],
                 'permission_callback' => $patternPermission
             ]);
 
-            register_rest_route('fluent-crm/v2', '/editor-patterns', [
+            register_rest_route($restNamespace, '/editor-patterns', [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [$this, 'handleEditorPatternCreate'],
                 'permission_callback' => $patternPermission
             ]);
 
-            register_rest_route('fluent-crm/v2', '/editor-patterns/(?P<id>\d+)', [
+            register_rest_route($restNamespace, '/editor-patterns/(?P<id>\d+)', [
                 'methods'             => \WP_REST_Server::READABLE,
                 'callback'            => [$this, 'handleEditorPatternGet'],
                 'permission_callback' => $patternPermission
             ]);
 
-            register_rest_route('fluent-crm/v2', '/editor-patterns/(?P<id>\d+)', [
+            register_rest_route($restNamespace, '/editor-patterns/(?P<id>\d+)', [
                 'methods'             => \WP_REST_Server::EDITABLE,
                 'callback'            => [$this, 'handleEditorPatternUpdate'],
                 'permission_callback' => $patternPermission
             ]);
 
-            register_rest_route('fluent-crm/v2', '/editor-patterns/(?P<id>\d+)', [
+            register_rest_route($restNamespace, '/editor-patterns/(?P<id>\d+)', [
                 'methods'             => \WP_REST_Server::DELETABLE,
                 'callback'            => [$this, 'handleEditorPatternDelete'],
                 'permission_callback' => function () {
@@ -166,13 +169,13 @@ class FluentBlockEditorHandler
                 }
             ]);
 
-            register_rest_route('fluent-crm/v2', '/editor-pattern-categories', [
+            register_rest_route($restNamespace, '/editor-pattern-categories', [
                 'methods'             => \WP_REST_Server::READABLE,
                 'callback'            => [$this, 'handleEditorPatternCategories'],
                 'permission_callback' => $patternPermission
             ]);
 
-            register_rest_route('fluent-crm/v2', '/editor-pattern-categories', [
+            register_rest_route($restNamespace, '/editor-pattern-categories', [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [$this, 'handleEditorPatternCategoryCreate'],
                 'permission_callback' => $patternPermission
@@ -1033,7 +1036,7 @@ class FluentBlockEditorHandler
             ],
             'can_save'                => $canSave,
             'autosave'                => [
-                'endpoint' => rest_url('fluent-crm/v1/editor-autosave'),
+                'endpoint' => rest_url(FluentCrm()->config->get('app.rest_namespace') . '/v1/editor-autosave'),
                 'nonce'    => wp_create_nonce('wp_rest')
             ],
             'fcrm_ui'                 => isset($data['fcrm_ui']) ? sanitize_text_field($data['fcrm_ui']) : '',
@@ -1064,7 +1067,7 @@ class FluentBlockEditorHandler
     }
 
     /**
-     * Get editor feature flags based on content type.
+     * Get editor feature flags based on content type and current-user permissions.
      * This is the single source of truth for which UI elements show per context.
      *
      * @param string $context  block_type: campaign, template, email_pattern, recurring_campaign, sequence_mail, email_body_in_funnel
@@ -1113,8 +1116,15 @@ class FluentBlockEditorHandler
         ];
 
         $features = isset($presets[$context]) ? $presets[$context] : $emailDefaults;
+        $features = apply_filters('fluent_crm/block_editor_features', $features, $context);
 
-        return apply_filters('fluent_crm/block_editor_features', $features, $context);
+        // Template CRUD has its own capability, but preview renders through CampaignPolicy endpoints.
+        // Publish this restriction in the iframe boot data so Gutenberg never exposes a forbidden action.
+        if ($context === 'template' && !PermissionManager::currentUserCan('fcrm_manage_emails')) {
+            $features['email_preview'] = false;
+        }
+
+        return $features;
     }
 
     private function getAiWritingConfig()
@@ -1360,6 +1370,16 @@ class FluentBlockEditorHandler
         $availableDesigns = array_filter($availableDesigns, function ($design) {
             return !empty($design['use_gutenberg']);
         });
+        $designPresetPayloads = [];
+        foreach ($availableDesigns as $designKey => $design) {
+            $designPresetPayloads[$designKey] = $design;
+            $designPresetPayloads[$designKey]['config'] = [
+                'design_template' => Arr::get($design, 'id', $designKey)
+            ];
+        }
+
+        // Namespaced REST routes for the editor bundle; namespace follows FLUENTCRM_REST_NAMESPACE
+        $ns = FluentCrm()->config->get('app.rest_namespace') . '/v2';
 
         $blockEditorConfig = [
             'modules'                 => [
@@ -1368,14 +1388,23 @@ class FluentBlockEditorHandler
                 'hasFluentCart'     => defined('FLUENTCART_VERSION')
             ],
             'endpoints'               => [
-                'products'     => apply_filters('fluent_crm/block_editor_products_endpoint', 'fluent-crm/v2/campaigns-pro/products'),
-                'cartProducts' => apply_filters('fluent_crm/block_editor_cart_products_endpoint', 'fluent-crm/v2/editor/cart-products'),
-                'tags'         => apply_filters('fluent_crm/block_editor_tags_endpoint', 'fluent-crm/v2/reports/options?fields=tags')
+                'aiGenerate'          => $ns . '/ai/generate',
+                'aiGenerateEmailBody' => $ns . '/ai/generate-email-body',
+                'posts'               => $ns . '/campaigns-pro/posts',
+                'postTaxonomies'      => $ns . '/campaigns-pro/posts/taxonomies',
+                'products'            => apply_filters('fluent_crm/block_editor_products_endpoint', $ns . '/campaigns-pro/products'),
+                'cartProducts'        => apply_filters('fluent_crm/block_editor_cart_products_endpoint', $ns . '/editor/cart-products'),
+                'patterns'            => $ns . '/editor-patterns',
+                'patternCategories'   => $ns . '/editor-pattern-categories',
+                'smartLinks'          => $ns . '/smart-links',
+                'tags'                => apply_filters('fluent_crm/block_editor_tags_endpoint', $ns . '/reports/options?fields=tags')
             ],
             'fontSizes'               => BlockEditorHelper::getDefaultPreset('font-size'),
             'spacingPresets'          => BlockEditorHelper::getDefaultPreset('spacing'),
             'defaultDesignConfig'     => Helper::getTemplateConfig(false),
-            'designTemplatePresets'   => $availableDesigns,
+            // Keep the shared design metadata intact for legacy consumers while ensuring
+            // Gutenberg preset clicks only change the selected design template.
+            'designTemplatePresets'   => $designPresetPayloads,
             'default_design_template' => Helper::getDefaultEmailTemplate()
         ];
 
@@ -1436,6 +1465,31 @@ class FluentBlockEditorHandler
 
         $blockStyleDefaults = BlockEditorHelper::getStyleDefauls();
 
+        // Active theme palette (classic or block theme) shown as a separate "Theme" group
+        // in the color picker. De-dupe by slug so a color already present in the FluentCRM
+        // default set is not listed twice.
+        $defaultColorSlugs = array_filter(array_map(function ($color) {
+            return isset($color['slug']) ? $color['slug'] : null;
+        }, (array)$blockStyleDefaults['color']));
+
+        $themeColorPalette = array_values(array_filter(
+            Helper::getThemeColorPalette(),
+            function ($color) use ($defaultColorSlugs) {
+                return isset($color['slug'], $color['color']) && !in_array($color['slug'], $defaultColorSlugs, true);
+            }
+        ));
+
+        // Color picker palette groups: FluentCRM's brand colors as the "Default" group and the
+        // active theme palette as the "Theme" group. On block themes the editor resolves color
+        // settings from theme.json (global styles) rather than these editor settings, and block
+        // themes commonly set "defaultPalette": false to hide WP's default palette — which is the
+        // same set FluentCRM uses for "Default". That gate is re-enabled for the email editor
+        // context via the wp_theme_json_data_theme filter (see forceDefaultPaletteForEmailEditor)
+        // so the "Default" group stays visible on block themes too.
+        $colorPalette = array_filter([
+            'default' => $blockStyleDefaults['color'],
+            'theme'   => $themeColorPalette,
+        ]);
 
         $editor_settings = array(
             'maxUploadFileSize'                => $max_upload_size,
@@ -1467,9 +1521,7 @@ class FluentBlockEditorHandler
                     'gradients'        => [],
                     'heading'          => 1,
                     'link'             => 1,
-                    'palette'          => [
-                        'default' => $blockStyleDefaults['color'],
-                    ],
+                    'palette'          => $colorPalette,
                     'text'             => true,
                 ],
                 'dimensions'                    => [
@@ -1795,6 +1847,7 @@ class FluentBlockEditorHandler
             'core/image',
             'core/list',
             'core/list-item',
+            'core/media-text',
             'core/missing',
             'core/paragraph',
             'core/preformatted',
@@ -1847,7 +1900,34 @@ class FluentBlockEditorHandler
         $defaultPresets = BlockEditorHelper::getStyleDefaultPresets();
         $dynamicCss = BlockEditorHelper::getDynamicCssForEditor();
 
+        // Concrete CSS for the active theme palette (classic or block theme). The editor
+        // iframe does not load the active theme stylesheet, so these declarations must use
+        // real hex/rgb values rather than var() re-references. Covers both the original slug
+        // and its normalized form (e.g. "palette1" + "palette-1"). The hardcoded
+        // theme-palette-color-1..8 rules below remain for backward compatibility.
+        $themePaletteVars = '';
+        $themePaletteRules = '';
+        foreach (Helper::getThemeColorPalette() as $themeColor) {
+            if (empty($themeColor['slug']) || empty($themeColor['color'])) {
+                continue;
+            }
+            $color = $themeColor['color'];
+            $slugs = array_unique([$themeColor['slug'], Helper::normalizeColorSlug($themeColor['slug'])]);
+            foreach ($slugs as $slug) {
+                $themePaletteVars .= "--wp--preset--color--{$slug}: {$color};";
+                $themePaletteRules .= ".has-{$slug}-color{color: {$color} !important;}";
+                $themePaletteRules .= ".has-{$slug}-background-color{background-color: {$color} !important;}";
+                $themePaletteRules .= ".has-{$slug}-border-color{border-color: {$color} !important;}";
+            }
+        }
+        $themePaletteCss = $themePaletteVars ? ":root{{$themePaletteVars}}{$themePaletteRules}" : '';
+
         return [
+            [
+                '__unstableType' => 'presets',
+                'css'            => $themePaletteCss,
+                'isGlobalStyles' => true
+            ],
             [
                 '__unstableType' => 'presets',
                 'css'            => ':root{' . $defaultPresets . '--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--theme-palette-color-1: var(--theme-palette-color-1);--wp--preset--color--theme-palette-color-2: var(--theme-palette-color-2);--wp--preset--color--theme-palette-color-3: var(--theme-palette-color-3);--wp--preset--color--theme-palette-color-4: var(--theme-palette-color-4);--wp--preset--color--theme-palette-color-5: var(--theme-palette-color-5);--wp--preset--color--theme-palette-color-6: var(--theme-palette-color-6);--wp--preset--color--theme-palette-color-7: var(--theme-palette-color-7);--wp--preset--color--theme-palette-color-8: var(--theme-palette-color-8);--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--gradient--juicy-peach: linear-gradient(to right, #ffecd2 0%, #fcb69f 100%);--wp--preset--gradient--young-passion: linear-gradient(to right, #ff8177 0%, #ff867a 0%, #ff8c7f 21%, #f99185 52%, #cf556c 78%, #b12a5b 100%);--wp--preset--gradient--true-sunset: linear-gradient(to right, #fa709a 0%, #fee140 100%);--wp--preset--gradient--morpheus-den: linear-gradient(to top, #30cfd0 0%, #330867 100%);--wp--preset--gradient--plum-plate: linear-gradient(135deg, #667eea 0%, #764ba2 100%);--wp--preset--gradient--aqua-splash: linear-gradient(15deg, #13547a 0%, #80d0c7 100%);--wp--preset--gradient--love-kiss: linear-gradient(to top, #ff0844 0%, #ffb199 100%);--wp--preset--gradient--new-retrowave: linear-gradient(to top, #3b41c5 0%, #a981bb 49%, #ffc8a9 100%);--wp--preset--gradient--plum-bath: linear-gradient(to top, #cc208e 0%, #6713d2 100%);--wp--preset--gradient--high-flight: linear-gradient(to right, #0acffe 0%, #495aff 100%);--wp--preset--gradient--teen-party: linear-gradient(-225deg, #FF057C 0%, #8D0B93 50%, #321575 100%);--wp--preset--gradient--fabled-sunset: linear-gradient(-225deg, #231557 0%, #44107A 29%, #FF1361 67%, #FFF800 100%);--wp--preset--gradient--arielle-smile: radial-gradient(circle 248px at center, #16d9e3 0%, #30c7ec 47%, #46aef7 100%);--wp--preset--gradient--itmeo-branding: linear-gradient(180deg, #2af598 0%, #009efd 100%);--wp--preset--gradient--deep-blue: linear-gradient(to right, #6a11cb 0%, #2575fc 100%);--wp--preset--gradient--strong-bliss: linear-gradient(to right, #f78ca0 0%, #f9748f 19%, #fd868c 60%, #fe9a8b 100%);--wp--preset--gradient--sweet-period: linear-gradient(to top, #3f51b1 0%, #5a55ae 13%, #7b5fac 25%, #8f6aae 38%, #a86aa4 50%, #cc6b8e 62%, #f18271 75%, #f3a469 87%, #f7c978 100%);--wp--preset--gradient--purple-division: linear-gradient(to top, #7028e4 0%, #e5b2ca 100%);--wp--preset--gradient--cold-evening: linear-gradient(to top, #0c3483 0%, #a2b6df 100%, #6b8cce 100%, #a2b6df 100%);--wp--preset--gradient--mountain-rock: linear-gradient(to right, #868f96 0%, #596164 100%);--wp--preset--gradient--desert-hump: linear-gradient(to top, #c79081 0%, #dfa579 100%);--wp--preset--gradient--ethernal-constance: linear-gradient(to top, #09203f 0%, #537895 100%);--wp--preset--gradient--happy-memories: linear-gradient(-60deg, #ff5858 0%, #f09819 100%);--wp--preset--gradient--grown-early: linear-gradient(to top, #0ba360 0%, #3cba92 100%);--wp--preset--gradient--morning-salad: linear-gradient(-225deg, #B7F8DB 0%, #50A7C2 100%);--wp--preset--gradient--night-call: linear-gradient(-225deg, #AC32E4 0%, #7918F2 48%, #4801FF 100%);--wp--preset--gradient--mind-crawl: linear-gradient(-225deg, #473B7B 0%, #3584A7 51%, #30D2BE 100%);--wp--preset--gradient--angel-care: linear-gradient(-225deg, #FFE29F 0%, #FFA99F 48%, #FF719A 100%);--wp--preset--gradient--juicy-cake: linear-gradient(to top, #e14fad 0%, #f9d423 100%);--wp--preset--gradient--rich-metal: linear-gradient(to right, #d7d2cc 0%, #304352 100%);--wp--preset--gradient--mole-hall: linear-gradient(-20deg, #616161 0%, #9bc5c3 100%);--wp--preset--gradient--cloudy-knoxville: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);--wp--preset--gradient--soft-grass: linear-gradient(to top, #c1dfc4 0%, #deecdd 100%);--wp--preset--gradient--saint-petersburg: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);--wp--preset--gradient--everlasting-sky: linear-gradient(135deg, #fdfcfb 0%, #e2d1c3 100%);--wp--preset--gradient--kind-steel: linear-gradient(-20deg, #e9defa 0%, #fbfcdb 100%);--wp--preset--gradient--over-sun: linear-gradient(60deg, #abecd6 0%, #fbed96 100%);--wp--preset--gradient--premium-white: linear-gradient(to top, #d5d4d0 0%, #d5d4d0 1%, #eeeeec 31%, #efeeec 75%, #e9e9e7 100%);--wp--preset--gradient--clean-mirror: linear-gradient(45deg, #93a5cf 0%, #e4efe9 100%);--wp--preset--gradient--wild-apple: linear-gradient(to top, #d299c2 0%, #fef9d7 100%);--wp--preset--gradient--snow-again: linear-gradient(to top, #e6e9f0 0%, #eef1f5 100%);--wp--preset--gradient--confident-cloud: linear-gradient(to top, #dad4ec 0%, #dad4ec 1%, #f3e7e9 100%);--wp--preset--gradient--glass-water: linear-gradient(to top, #dfe9f3 0%, white 100%);--wp--preset--gradient--perfect-white: linear-gradient(-225deg, #E3FDF5 0%, #FFE6FA 100%);--wp--preset--font-size--small: var(--fcom-font-size-small);--wp--preset--font-size--medium: var(--fcom-font-size-medium);--wp--preset--font-size--large: var(--fcom-font-size-large);--wp--preset--font-size--x-large: 42px;--wp--preset--font-size--larger: var(--fcom-font-size-larger);--wp--preset--font-size--xxlarge: var(--fcom-font-size-xxlarge);--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgba(255, 255, 255, 1), 6px 6px rgba(0, 0, 0, 1);--wp--preset--shadow--crisp: 6px 6px 0px rgba(0, 0, 0, 1);}',

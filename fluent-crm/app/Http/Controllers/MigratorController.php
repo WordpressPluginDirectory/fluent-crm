@@ -47,7 +47,9 @@ class MigratorController extends Controller
 
         if (is_wp_error($result)) {
             return $this->sendError([
-                'message' => $result->get_error_message(),
+                // Transport diagnostics can reveal internal hosts to delegated
+                // CRM settings managers. Keep this public API response generic.
+                'message' => __('Unable to verify the CRM credentials. Please check the URL and API key.', 'fluent-crm'),
             ], 422);
         }
 

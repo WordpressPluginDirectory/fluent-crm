@@ -33,9 +33,9 @@ class Drip
         );
 
         if ($method == 'POST') {
-            $response = wp_remote_post($this->apiUrl . $endpoint, $args);
+            $response = wp_safe_remote_post($this->apiUrl . $endpoint, $args);
         } else {
-            $response = wp_remote_get($this->apiUrl . $endpoint, $args);
+            $response = wp_safe_remote_get($this->apiUrl . $endpoint, $args);
         }
         /* If WP_Error, die. Otherwise, return decoded JSON. */
         if (is_wp_error($response)) {

@@ -109,10 +109,12 @@ class UrlGenerator
 
     /**
      * Normalize the expiry time.
-     * 
+     *
      * @param  array $params
      * @return array
      * @throws InvalidArgumentException
+     *
+     * @phpstan-ignore-next-line
      */
     public function validateExpiryTime(array $params): array
     {

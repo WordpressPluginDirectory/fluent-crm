@@ -20,7 +20,7 @@ class CampaignPolicy extends BasePolicy
      */
     public function verifyRequest(Request $request)
     {
-        if ($request->method() == 'GET') {
+        if ($this->requestMethod($request) == 'GET') {
             return $this->currentUserCan('fcrm_read_emails');
         }
 
@@ -37,8 +37,24 @@ class CampaignPolicy extends BasePolicy
         return $this->currentUserCan('fcrm_manage_email_delete');
     }
 
+    /**
+     * Authorize campaign bulk actions against their independent capabilities.
+     *
+     * @param Request $request
+     * @return bool
+     */
     public function handleBulkAction(Request $request)
     {
-        return $this->currentUserCan('fcrm_manage_email_delete');
+        $actionName = $request->getSafe('action_name', 'sanitize_text_field', '');
+
+        if ($actionName === 'delete_campaigns') {
+            return $this->currentUserCan('fcrm_manage_email_delete');
+        }
+
+        if ($actionName === 'apply_labels') {
+            return $this->verifyRequest($request);
+        }
+
+        return false;
     }
 }

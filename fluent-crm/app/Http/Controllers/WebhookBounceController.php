@@ -20,6 +20,10 @@ class WebhookBounceController extends Controller
 
     public function handleBounce(Request $request, $serviceName, $securityCode)
     {
+        if (!hash_equals($this->getSecurityCode(), $securityCode)) {
+            return $this->getError();
+        }
+        
         if (!in_array($serviceName, $this->validServices)) {
             /**
              * Filter the bounce handling response for a specific service.
@@ -47,10 +51,6 @@ class WebhookBounceController extends Controller
                 'result'  => '',
                 'time'    => time()
             ], $request, $securityCode);
-        }
-
-        if (!hash_equals($this->getSecurityCode(), $securityCode)) {
-            return $this->getError();
         }
 
         $result = (new Webhook())->handle($serviceName, $request);

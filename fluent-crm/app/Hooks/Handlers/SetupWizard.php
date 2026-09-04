@@ -122,6 +122,10 @@ class SetupWizard
             'business_settings' => (object) $businessSettings,
             'has_fluentform'    => defined('FLUENTFORM'),
             'has_fluentcart'    => defined('FLUENTCART_VERSION'),
+            // The wizard only offers a companion-plugin install to users who can
+            // actually perform one; SettingsPolicy::CompleteWizard() rejects the
+            // install flags from anyone else, which would strand the last step.
+            'can_install_plugins' => current_user_can('install_plugins'),
             'auth' => [
                 'permissions' => PermissionManager::currentUserPermissions(),
                 'first_name' => $currentUser->first_name,

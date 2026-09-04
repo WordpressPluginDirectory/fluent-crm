@@ -76,18 +76,34 @@ class FunnelProcessor
             if (!$subscriber) {
                 return false;
             }
-        } elseif (Arr::get($subscriberData, 'status') === 'pending' && $subscriber->status !== 'subscribed') {
-            // update status only if it's not subscribed already
-            $subscriber->status = 'pending';
-            $subscriber->save();
         }
 
-        if ($subscriber->status == 'pending') {
+        // This trigger runs the double opt-in flow and the contact just took the
+        // triggering action, so re-invite them whatever their current status
+        // (unsubscribed, bounced, …). No status write — only the confirmation click
+        // makes them 'subscribed'.
+        $isOptinReinvite = Arr::get($subscriberData, 'status') === 'pending'
+            && $subscriber->status != 'subscribed';
+
+        if ($isOptinReinvite) {
             $subscriber->sendDoubleOptinEmail();
         }
 
         $args = [
-            'status' => ($subscriber->status == 'pending' || $subscriber->status == 'unsubscribed') ? 'pending' : 'draft'
+            // 'pending' parks the funnel row until the contact confirms (resumed via the
+            // fluentcrm_subscriber_status_to_subscribed hook); 'draft' enters it for
+            // processing. Suppressed contacts on normal (non-opt-in) triggers enter as
+            // 'draft' so non-email actions (tagging, notifications) still run — the
+            // send-time sendable-status guard blocks any actual email to them.
+            //
+            // An opt-in re-invite ALWAYS parks, whatever status the contact retains.
+            // We just asked them to confirm, so no automation step may run until they
+            // do — previously this was implicit because the flow wrote 'pending' onto
+            // the contact first; now that it deliberately does not, bounced and
+            // complained contacts would otherwise enter as 'draft' and start running.
+            'status' => ($isOptinReinvite
+                || $subscriber->status == 'pending'
+                || $subscriber->status == 'unsubscribed') ? 'pending' : 'draft'
         ];
 
         if ($funnelSubArgs) {
@@ -163,6 +179,27 @@ class FunnelProcessor
         // If a conditional was processed, initChildSequences() already
         // handled the subscriber's next state — skip status update
         if ($hasConditional) {
+            /*
+             * The conditional's handler is Pro-only and may be absent (Pro deactivated,
+             * step imported into a free install) or may have thrown (swallowed in
+             * processSequence). In that case the row is left status=active with a NULL
+             * next_execution_time — invisible to the cron query forever. Verify a real
+             * transition happened; if not, schedule the row so the engine advances past
+             * the conditional block (last_sequence_id already points at it) on the next
+             * tick instead of stranding the subscriber.
+             */
+            $freshSubscriber = FunnelSubscriber::where('id', $funnelSubscriber->id)->first();
+            if ($freshSubscriber && $freshSubscriber->status == 'active' && !$freshSubscriber->next_execution_time) {
+                Helper::debugLog(
+                    'Conditional step did not transition funnel subscriber ' . $funnelSubscriber->id . ' (funnel ' . $funnelSubscriber->funnel_id . ')',
+                    'Handler missing or failed — subscriber scheduled to advance past the conditional block'
+                );
+
+                FunnelSubscriber::where('id', $freshSubscriber->id)
+                    ->update([
+                        'next_execution_time' => current_time('mysql')
+                    ]);
+            }
             return;
         }
 
@@ -217,8 +254,21 @@ class FunnelProcessor
         }
 
         if ($funnelMetric->wasRecentlyCreated) {
+            $handlerHook = 'fluentcrm_funnel_sequence_handle_' . $sequence->action_name;
+
+            if (!has_action($handlerHook)) {
+                // No runtime handler registered (Pro deactivated mid-flight, or a Pro-only
+                // step imported into a free install). Treat as an explicit "skip step and
+                // advance" with a log — a silent no-op here strands the subscriber.
+                Helper::debugLog(
+                    'Missing funnel sequence handler "' . $sequence->action_name . '" for funnel ' . $sequence->funnel_id,
+                    'Funnel Sub ID: ' . $funnelSubscriberId . ' — step skipped'
+                );
+                return;
+            }
+
             try {
-                do_action('fluentcrm_funnel_sequence_handle_' . $sequence->action_name, $subscriber, $sequence, $funnelSubscriberId, $funnelMetric, $this);
+                do_action($handlerHook, $subscriber, $sequence, $funnelSubscriberId, $funnelMetric, $this);
             } catch (\Throwable $e) {
                 Helper::debugLog('Funnel sequence error for ' . $sequence->funnel_id . ' => Funnel Sub ID: ' . $funnelSubscriberId, $e->getMessage());
             }
@@ -468,6 +518,9 @@ class FunnelProcessor
         }
     }
 
+    /**
+     * Execute the matched conditional branch and resume the parent-level sequence flow.
+     */
     public function initChildSequences($parent, $isMatched, $subscriber, $funnelSubscriberId, $funnelMetric)
     {
         $conditionType = 'no';
@@ -539,12 +592,11 @@ class FunnelProcessor
             return false;
         }
 
-        $funnelSubscriber->last_sequence_id = $parent->id;
-        FunnelHelper::changeFunnelSubSequenceStatus($funnelSubscriberId, $parent->id);
         $funnel = $this->getFunnel($parent->funnel_id);
 
-        // we don't have next sequence so we have to loop back to the parent
-        $sequencePoints = new SequencePoints($funnel, $funnelSubscriber);
+        // Resume traversal from the conditional parent without replacing the
+        // actual child action persisted as the subscriber's latest action.
+        $sequencePoints = new SequencePoints($funnel, $funnelSubscriber, $parent->id);
 
         if ($waitTimes && $currentNextSequences = $sequencePoints->getCurrentSequences()) {
             $nextSequence = $currentNextSequences[0];

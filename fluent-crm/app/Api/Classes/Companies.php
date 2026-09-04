@@ -7,6 +7,7 @@ defined('ABSPATH') || exit;
 use FluentCrm\App\Models\Company;
 use FluentCrm\App\Models\CustomCompanyField;
 use FluentCrm\App\Models\Subscriber;
+use FluentCrm\App\Services\Sanitize;
 use FluentCrm\Framework\Support\Arr;
 
 /**
@@ -72,7 +73,12 @@ class Companies
             if (isset($data['custom_values'])) {
                 $existingMeta = $exist->meta;
                 $values = Arr::get($data, 'custom_values', []);
-                $values = (new CustomCompanyField())->formatCustomFieldValues($values);
+                // formatCustomFieldValues() only coerces types; sanitize here, at the
+                // single point every company custom-value write passes through, so the
+                // values cannot reach the meta column as live markup.
+                $values = Sanitize::companyCustomValues(
+                    (new CustomCompanyField())->formatCustomFieldValues($values)
+                );
                 $temp = $existingMeta['custom_values'];
                 foreach ($values as $key => $value)
                 {
@@ -96,7 +102,9 @@ class Companies
         $fillables[] = 'custom_values';
         $data = Arr::only($data, $fillables);
         $values = Arr::get($data, 'custom_values', []);
-        $values = (new CustomCompanyField())->formatCustomFieldValues($values);
+        $values = Sanitize::companyCustomValues(
+            (new CustomCompanyField())->formatCustomFieldValues($values)
+        );
 
         $data['meta'] = [
             'custom_values' => $values

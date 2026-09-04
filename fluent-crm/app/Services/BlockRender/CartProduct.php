@@ -24,8 +24,6 @@ class CartProduct
             'backgroundColor' => '#fffeeb',
             'contentColor'    => '',
             'pricingColor'    => '',
-            'buttonColor'     => '#ffffff',
-            'buttonBG'        => '#2a363d',
             'template'        => 'left',
         ];
 
@@ -98,9 +96,8 @@ class CartProduct
             $template = 'none';
         }
 
-        $buttonStyle = self::buildButtonStyle($atts);
         if ($showButton) {
-            $fallbackButton = '<a href="' . esc_url($product['permalink']) . '" style="' . esc_attr($buttonStyle) . '">' . esc_html(Arr::get($atts, 'buttonText', __('Buy Now', 'fluent-crm'))) . '</a>';
+            $fallbackButton = '<a href="' . esc_url($product['permalink']) . '" style="text-decoration:none;display:inline-block;padding:8px 18px;border-radius:4px;background:#2a363d;color:#ffffff;">' . esc_html(Arr::get($atts, 'buttonText', __('Buy Now', 'fluent-crm'))) . '</a>';
             $contentHtml .= '<div style="margin-top:10px;margin-bottom:10px;">' . ($buttonHtml ?: $fallbackButton) . '</div>';
         }
 
@@ -149,23 +146,6 @@ class CartProduct
         $width = ($template === 'left') ? '50' : '100';
 
         return '<td align="center" valign="middle" width="' . $width . '%" class="fce_column"><table border="0" cellpadding="10" cellspacing="0" width="100%"><tr><td class="fc_column_content" style="padding:10px;' . $extraStyle . '">' . $contentHtml . '</td></tr></table></td>';
-    }
-
-    private static function buildButtonStyle($atts)
-    {
-        $style = 'text-decoration:none;display:inline-block;padding:12px 18px;border-radius:4px;';
-        $buttonColor = trim((string)Arr::get($atts, 'buttonColor', ''));
-        $buttonBg = trim((string)Arr::get($atts, 'buttonBG', ''));
-
-        if ($buttonColor) {
-            $style .= 'color:' . sanitize_text_field($buttonColor) . ';';
-        }
-
-        if ($buttonBg) {
-            $style .= 'background:' . sanitize_text_field($buttonBg) . ';';
-        }
-
-        return $style;
     }
 
     private static function normalizeTemplate($template)

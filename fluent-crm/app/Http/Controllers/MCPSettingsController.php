@@ -99,7 +99,7 @@ class MCPSettingsController extends Controller
 
     /**
      * One-click adapter install. Free can only explain the missing dependency;
-     * Pro may opt in to the Fluent Toolkit background installer via hooks.
+     * Pro may opt in to the FluentHub background installer via hooks.
      */
     public function installAdapter()
     {
@@ -112,7 +112,7 @@ class MCPSettingsController extends Controller
         $canAutoInstall = (bool) apply_filters('fluent_toolkit/can_auto_install', false);
         if (!$canAutoInstall) {
             return $this->sendError([
-                'message' => __('Please install Fluent Toolkit from GitHub, then reload this page to connect FluentCRM with AI agents.', 'fluent-crm'),
+                'message' => __('Please install FluentHub from GitHub, then reload this page to connect FluentCRM with AI agents.', 'fluent-crm'),
                 'toolkit_download_url' => 'https://github.com/WPManageNinja/fluent-toolkit',
             ]);
         }
@@ -133,13 +133,13 @@ class MCPSettingsController extends Controller
         $isActive = (is_plugin_active(self::ADAPTER_PLUGIN_FILE) && $adapterRuntimeAvailable) || $toolkitAdapterAvailable;
 
         if ($isInstalled && $isActive) {
-            $message = __('Fluent Toolkit installed and activated. Reload the page to register FluentCRM MCP tools.', 'fluent-crm');
+            $message = __('FluentHub installed and activated. Reload the page to register FluentCRM MCP tools.', 'fluent-crm');
         } elseif ($toolkitInstalled && $toolkitActive) {
-            $message = __('Fluent Toolkit is installed and active, but this version does not include the bundled MCP adapter yet. Please update Fluent Toolkit when the MCP-ready build is available, then reload this page.', 'fluent-crm');
+            $message = __('FluentHub is installed and active, but this version does not include the bundled MCP adapter yet. Please update FluentHub when the MCP-ready build is available, then reload this page.', 'fluent-crm');
         } elseif ($toolkitInstalled) {
-            $message = __('Fluent Toolkit is installed but could not be activated automatically. Please activate Fluent Toolkit from the Plugins page, then reload this page.', 'fluent-crm');
+            $message = __('FluentHub is installed but could not be activated automatically. Please activate FluentHub from the Plugins page, then reload this page.', 'fluent-crm');
         } else {
-            $message = __('Could not install Fluent Toolkit automatically. Please install Fluent Toolkit manually, then reload this page.', 'fluent-crm');
+            $message = __('Could not install FluentHub automatically. Please install FluentHub manually, then reload this page.', 'fluent-crm');
         }
 
         return [

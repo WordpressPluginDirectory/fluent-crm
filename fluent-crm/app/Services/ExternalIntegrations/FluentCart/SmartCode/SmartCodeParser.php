@@ -8,6 +8,8 @@ use FluentCart\App\Services\Payments\PaymentReceipt;
 use FluentCart\App\Services\URL;
 use FluentCrm\App\Models\FunnelSubscriber;
 use FluentCart\Api\Resource\OrderResource;
+use FluentCrm\App\Models\FunnelMetric;
+use FluentCrm\App\Services\ExternalIntegrations\FluentCart\Actions\DynamicCouponService;
 
 class SmartCodeParser {
 
@@ -70,6 +72,50 @@ class SmartCodeParser {
         }
 
         return self::parseCustomerProps($orderCustomer, $valueKey, $defaultValue);
+    }
+
+    /**
+     * Resolve the dynamic coupon smartcode {{cart_coupon.{funnel_id}_{sequence_id}}}.
+     *
+     * Returns the generated code stored on the contact's matching funnel metric, but only once the
+     * real FluentCart coupon exists (created on first parse, since FluentCart has no checkout-time
+     * coupon resolution hook). Creation is idempotent via DynamicCouponService::ensureCouponExists();
+     * if it cannot be materialised the smartcode falls back to $defaultValue rather than emitting a
+     * code that would fail at checkout.
+     */
+    public static function parseCartCoupon($code, $valueKey, $defaultValue, $subscriber)
+    {
+        $codeParts = explode('_', $valueKey);
+        $codeParts = array_map('trim', $codeParts);
+        $codeParts = array_map('intval', $codeParts);
+        // array_filter preserves keys, so reindex: without this a hand-written code such as
+        // {{cart_coupon.0_12_34}} passes the count guard below but leaves index 0 undefined.
+        $codeParts = array_values(array_filter($codeParts));
+
+        if (count($codeParts) < 2) {
+            return $defaultValue;
+        }
+
+        $funnelId = $codeParts[0];
+        $sequenceId = $codeParts[1];
+
+        $funnelMetric = FunnelMetric::where('funnel_id', $funnelId)
+            ->where('sequence_id', $sequenceId)
+            ->where('subscriber_id', $subscriber->id)
+            ->orderBy('id', 'DESC')
+            ->first();
+
+        if (!$funnelMetric || !$funnelMetric->notes) {
+            return $defaultValue;
+        }
+
+        // Only emit the code once the fct_coupons row actually exists. Materialisation and delivery
+        // are the same call here, so emitting on failure would email a coupon FluentCart rejects.
+        if (!(new DynamicCouponService())->ensureCouponExists((string) $funnelMetric->notes, $funnelMetric, $subscriber)) {
+            return $defaultValue;
+        }
+
+        return (string) $funnelMetric->notes;
     }
 
     public static function parseCartTransaction($code, $valueKey, $defaultValue, $subscriber)

@@ -61,10 +61,10 @@ class DocsController extends Controller
         $toolkitPluginFile = 'fluent-toolkit/fluent-toolkit.php';
         $toolkitLoaded = defined('FLUENT_TOOLKIT_VERSION');
         $toolkitPluginExists = $this->isPluginInstalled($toolkitPluginFile);
-        $toolkitActionText = __('Get FluentKit from GitHub', 'fluent-crm');
+        $toolkitActionText = __('Get FluentHub from GitHub', 'fluent-crm');
 
         if ($canAutoInstallToolkit) {
-            $toolkitActionText = $toolkitPluginExists ? __('Activate FluentKit', 'fluent-crm') : __('Install FluentKit', 'fluent-crm');
+            $toolkitActionText = $toolkitPluginExists ? __('Activate FluentHub', 'fluent-crm') : __('Install FluentHub', 'fluent-crm');
         }
 
         $addOns = [
@@ -132,7 +132,7 @@ class DocsController extends Controller
                 'description'    => __('WordPress Appointment Booking Plugin. Manage appointments, bookings, and customer scheduling right from your WordPress dashboard.', 'fluent-crm')
             ],
             'fluent-toolkit' => [
-                'title'          => __('FluentKit', 'fluent-crm'),
+                'title'          => __('FluentHub', 'fluent-crm'),
                 'logo'           => fluentCrmMix('images/fluent-toolkit.svg'),
                 'is_installed'   => $toolkitLoaded,
                 'learn_more_url' => 'https://github.com/WPManageNinja/fluent-toolkit',
@@ -140,7 +140,7 @@ class DocsController extends Controller
                 'action_text'    => $toolkitActionText,
                 'install_route'  => $canAutoInstallToolkit ? 'mcp/install-adapter' : '',
                 'install_url'    => $canAutoInstallToolkit ? '' : 'https://github.com/WPManageNinja/fluent-toolkit',
-                'description'    => __('FluentCRM ships AI agent tools, but they only become available once FluentKit is installed and active.', 'fluent-crm')
+                'description'    => __('FluentCRM ships AI agent tools, but they only become available once FluentHub is installed and active.', 'fluent-crm')
             ]
         ];
 

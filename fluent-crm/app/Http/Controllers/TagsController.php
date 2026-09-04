@@ -26,8 +26,8 @@ class TagsController extends Controller
     public function index(Request $request)
     {
         $order = [
-            'by'    => $request->getSafe('sort_by', 'sanitize_sql_orderby', 'id'),
-            'order' => $request->getSafe('sort_order', 'sanitize_sql_orderby', 'DESC')
+            'by'    => Helper::sanitizeOrderBy($request->get('sort_by'), 'id'),
+            'order' => Helper::sanitizeOrderBy($request->get('sort_order'), 'DESC')
         ];
 
         $tags = Tag::orderBy($order['by'], $order['order'])
@@ -35,8 +35,34 @@ class TagsController extends Controller
             ->paginate();
 
         if (!$request->get('exclude_counts')) {
+            // One grouped pivot-join count for the whole page instead of a
+            // JOIN + COUNT query per tag.
+            $tagIds = [];
             foreach ($tags as $tag) {
-                $tag->subscribersCount = $tag->countByStatus('subscribed');
+                $tagIds[] = $tag->id;
+            }
+
+            $counts = [];
+            if ($tagIds) {
+                $countRows = fluentCrmDb()->table('fc_subscriber_pivot')
+                    ->where('fc_subscriber_pivot.object_type', 'FluentCrm\App\Models\Tag')
+                    ->whereIn('fc_subscriber_pivot.object_id', $tagIds)
+                    ->join('fc_subscribers', 'fc_subscribers.id', '=', 'fc_subscriber_pivot.subscriber_id')
+                    ->where('fc_subscribers.status', 'subscribed')
+                    ->groupBy('fc_subscriber_pivot.object_id')
+                    ->select([
+                        'fc_subscriber_pivot.object_id',
+                        fluentCrmDb()->raw('COUNT(*) as total')
+                    ])
+                    ->get();
+
+                foreach ($countRows as $countRow) {
+                    $counts[$countRow->object_id] = (int)$countRow->total;
+                }
+            }
+
+            foreach ($tags as $tag) {
+                $tag->subscribersCount = isset($counts[$tag->id]) ? $counts[$tag->id] : 0;
             }
         }
 
@@ -49,9 +75,10 @@ class TagsController extends Controller
             $formattedTags = [];
             foreach ($allTags as $tag) {
                 $formattedTags[] = [
-                    'id'    => strval($tag->id),
-                    'title' => $tag->title,
-                    'slug'  => $tag->slug
+                    'id'          => strval($tag->id),
+                    'title'       => $tag->title,
+                    'slug'        => $tag->slug,
+                    'description' => $tag->description
                 ];
             }
             $data['all_tags'] = $formattedTags;
@@ -71,7 +98,7 @@ class TagsController extends Controller
     }
 
     /**
-     * Store a tag.
+     * Store a tag after validating its database-bound title and slug.
      * @param \FluentCrm\Framework\Http\Request\Request $request
      * @return \WP_REST_Response
      */
@@ -86,8 +113,8 @@ class TagsController extends Controller
         }
 
         $allData = $this->validate($allData, [
-            'title' => 'required',
-            'slug'  => "required|unique:fc_tags,slug"
+            'title' => 'required|string|max:192',
+            'slug'  => "required|string|max:192|unique:fc_tags,slug"
         ]);
 
         $tag = Tag::create([
@@ -108,20 +135,25 @@ class TagsController extends Controller
     }
 
     /**
-     * Store a tag.
+     * Update a tag after validating its database-bound title and slug.
      * @param \FluentCrm\Framework\Http\Request\Request $request
      * @param $id int Tag ID
      * @return \WP_REST_Response
      */
     public function store(Request $request, $id)
     {
-        $allData = $this->validate($request->all(), [
-            'title' => 'required'
-        ]);
+        $allData = $request->all();
 
         if (empty($allData['slug'])) {
             $allData['slug'] = Helper::slugify($allData['title']);
+        } else {
+            $allData['slug'] = sanitize_text_field($allData['slug']);
         }
+
+        $allData = $this->validate($allData, [
+            'title' => 'required|string|max:192',
+            'slug'  => 'required|string|max:192'
+        ]);
 
         if ($id == 0 && $request->get('update_by') == 'slug' && !empty($allData['slug'])) {
 

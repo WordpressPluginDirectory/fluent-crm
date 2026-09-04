@@ -211,9 +211,27 @@ class FunnelHandler
     {
         $triggerNameBase = $triggerName;
 
-        $funnels = Funnel::where('status', 'published')
-            ->where('trigger_name', $triggerNameBase)
-            ->get();
+        // Per-request memoization: bulk operations (tagging 50k contacts) route every
+        // contact's event through here — re-querying published funnels/benchmarks per
+        // event adds 100k+ identical queries even when no funnel matches the trigger.
+        static $triggerCache = [];
+
+        if (!isset($triggerCache[$triggerNameBase])) {
+            $triggerCache[$triggerNameBase] = [
+                'funnels'    => Funnel::where('status', 'published')
+                    ->where('trigger_name', $triggerNameBase)
+                    ->get(),
+                'benchmarks' => FunnelSequence::where('type', 'benchmark')
+                    ->where('action_name', $triggerNameBase)
+                    ->whereHas('funnel', function ($q) {
+                        return $q->where('status', 'published');
+                    })
+                    ->orderBy('id', 'ASC')
+                    ->get(),
+            ];
+        }
+
+        $funnels = $triggerCache[$triggerNameBase]['funnels'];
 
         foreach ($funnels as $funnel) {
             ob_start();
@@ -226,13 +244,7 @@ class FunnelHandler
             $maybeErrors = ob_get_clean();
         }
 
-        $benchMarks = FunnelSequence::where('type', 'benchmark')
-            ->where('action_name', $triggerNameBase)
-            ->whereHas('funnel', function ($q) {
-                return $q->where('status', 'published');
-            })
-            ->orderBy('id', 'ASC')
-            ->get();
+        $benchMarks = $triggerCache[$triggerNameBase]['benchmarks'];
 
         foreach ($benchMarks as $benchMark) {
             ob_start();
@@ -246,54 +258,21 @@ class FunnelHandler
         }
     }
 
+    /**
+     * Claim the funnel-processor lock so two runners can't process the same
+     * queue concurrently. Backed by an atomic conditional UPDATE on wp_options
+     * (Helper::acquireDbLock) on every environment — not wp_cache_add(), which
+     * is not atomic under all object-cache drop-ins (e.g. LiteSpeed) and would
+     * let concurrent runners all acquire the lock. See Helper::acquireDbLock().
+     */
     private function acquireFunnelProcessorLock()
     {
-        $now = time();
-
-        if (wp_using_ext_object_cache()) {
-            if (wp_cache_add($this->lockKey, $now, 'fc_instant_options', $this->lockTimeout)) {
-                return true;
-            }
-
-            $existing = wp_cache_get($this->lockKey, 'fc_instant_options');
-            if ($existing && ($now - (int)$existing) > $this->lockTimeout) {
-                wp_cache_delete($this->lockKey, 'fc_instant_options');
-                if (wp_cache_add($this->lockKey, $now, 'fc_instant_options', $this->lockTimeout)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        global $wpdb;
-
-        $wpdb->query($wpdb->prepare(
-            "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)",
-            $this->lockKey, '', 'no'
-        ));
-
-        $affected = $wpdb->query($wpdb->prepare(
-            "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND (option_value = '' OR option_value < %d)",
-            (string)$now, $this->lockKey, $now - $this->lockTimeout
-        ));
-
-        if ($affected > 0) {
-            wp_cache_delete($this->lockKey, 'options');
-            return true;
-        }
-
-        return false;
+        return Helper::acquireDbLock($this->lockKey, $this->lockTimeout);
     }
 
     private function releaseFunnelProcessorLock()
     {
-        if (wp_using_ext_object_cache()) {
-            wp_cache_delete($this->lockKey, 'fc_instant_options');
-            return;
-        }
-
-        update_option($this->lockKey, '', false);
+        Helper::releaseDbLock($this->lockKey);
     }
 
     public function resetFunnelIndexes()
@@ -394,49 +373,22 @@ class FunnelHandler
         $request = FluentCrm('request');
         $data = $request->all();
 
-        $data['sequences'] = wp_unslash(Arr::get($data, 'sequences'));
+        if (array_key_exists('sequences', $data)) {
+            $data['sequences'] = wp_unslash($data['sequences']);
+        }
 
-        $funnel = FunnelHelper::saveFunnelSequence($data['funnel_id'], $data);
+        try {
+            $funnel = FunnelHelper::saveFunnelSequence($data['funnel_id'], $data);
+        } catch (\Exception $e) {
+            wp_send_json([
+                'message' => $e->getMessage()
+            ], 422);
+        }
 
         wp_send_json([
             'sequences' => FunnelHelper::getFunnelSequences($funnel, true),
             'message'   => __('Sequence successfully updated', 'fluent-crm')
         ]);
-    }
-
-    public function exportFunnel()
-    {
-        check_ajax_referer('fluentcrm_ajax_nonce', '_nonce');
-
-        $permission = 'manage_options';
-        if (!current_user_can($permission)) {
-            die('You do not have permission');
-        }
-
-        $funnelId = intval($_REQUEST['funnel_id']);
-        $funnel = Funnel::findOrFail($funnelId);
-        /**
-         * Determine the funnel editor details based on the funnel's trigger name.
-         *
-         * The dynamic portion of the hook name, `$funnel->trigger_name`, refers to the trigger name of the funnel.
-         *
-         * @param object $funnel The funnel object containing the editor details.
-         * @since 2.0.0
-         *
-         */
-        $funnel = apply_filters('fluentcrm_funnel_editor_details_' . $funnel->trigger_name, $funnel);
-
-        $funnel->labels = $funnel->getFormattedLabels();
-
-        $funnel->sequences = FunnelHelper::getFunnelSequences($funnel, true);
-
-        $funnel->site_hash = md5(site_url());
-        $funnel->export_date = gmdate('Y-m-d H:i:s');
-
-        header('Content-disposition: attachment; filename=' . sanitize_title($funnel->title, 'funnel', 'display') . '-' . $funnelId . '.json');
-        header('Content-type: application/json');
-        echo json_encode($funnel); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-        exit();
     }
 
     public function saveEmailAction()

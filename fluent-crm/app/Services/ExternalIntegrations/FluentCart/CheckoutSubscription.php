@@ -194,7 +194,9 @@ class CheckoutSubscription
                 return false;
             }
 
-            if ($contact->status == 'pending') {
+            // The purchase is the re-consent event, so re-invite any non-subscribed
+            // contact when the checkout feed has double opt-in enabled.
+            if (Arr::get($settings, 'double_optin') == 'yes' && $contact->status != 'subscribed') {
                 $contact->sendDoubleOptinEmail();
             }
         } catch (\Throwable $e) {

@@ -4,6 +4,8 @@ namespace FluentCrm\App\Http\Controllers;
 
 use FluentCrm\App\Models\Template;
 use FluentCrm\App\Services\Helper;
+use FluentCrm\App\Services\PermissionManager;
+use FluentCrm\App\Services\RemoteTemplateFetcher;
 use FluentCrm\App\Services\Sanitize;
 use FluentCrm\Framework\Support\Arr;
 use FluentCrm\Framework\Http\Request\Request;
@@ -19,17 +21,30 @@ use FluentCrm\Framework\Http\Request\Request;
  */
 class TemplateController extends Controller
 {
+    /**
+     * List templates while limiting email readers to metadata used by the table.
+     *
+     * @param Request $request
+     * @return mixed
+     */
     public function templates(Request $request)
     {
-        $order = $request->getSafe('order', 'sanitize_sql_orderby', 'desc');
-        $orderBy = $request->getSafe('orderBy', 'sanitize_sql_orderby', 'ID');
+        $order = Helper::sanitizeOrderBy($request->get('order'), 'desc');
+        $orderBy = Helper::sanitizeOrderBy($request->get('orderBy'), 'ID');
 
         $templatesQuery = Template::emailTemplates(
             $request->get('types', ['publish', 'draft'])
         );
 
+        // Template managers retain the legacy payload; newly-authorized readers receive list metadata only.
+        if (!PermissionManager::currentUserCan('fcrm_manage_email_templates')) {
+            $templatesQuery->select(['ID', 'post_title', 'post_modified']);
+        }
+
         if ($search = $request->getSafe('search')) {
-            $templatesQuery->where('post_title', 'LIKE', '%' . $search . '%');
+            // Escape LIKE wildcards (%, _) so the term matches literally, not as wildcards.
+            global $wpdb;
+            $templatesQuery->where('post_title', 'LIKE', '%' . $wpdb->esc_like($search) . '%');
         }
 
         // Order the query results and paginate
@@ -273,6 +288,12 @@ class TemplateController extends Controller
         ]);
     }
 
+    /**
+     * Apply a bulk action only to email-template posts matched by the request.
+     *
+     * @param Request $request
+     * @return array|\FluentCrm\Framework\Http\Response\Response
+     */
     public function handleBulkAction(Request $request)
     {
         $actionName = sanitize_text_field($request->get('action_name', ''));
@@ -284,10 +305,23 @@ class TemplateController extends Controller
         $selectAllTemplates = filter_var($request->get('select_all'), FILTER_VALIDATE_BOOLEAN);
 
         if ($selectAllTemplates) {
-            $templateIds = Template::pluck('id')->toArray();
+            $templatesQuery = Template::emailTemplates(['publish', 'draft']);
+
+            if ($search = $request->getSafe('search')) {
+                global $wpdb;
+                $templatesQuery->where('post_title', 'LIKE', '%' . $wpdb->esc_like($search) . '%');
+            }
+
+            $templateIds = $templatesQuery->pluck('ID')->toArray();
         }
 
         $templateIds = array_filter($templateIds);
+
+        // Reapply the post-type scope so crafted explicit IDs cannot mutate other wp_posts rows.
+        $templates = Template::emailTemplates(['publish', 'draft'])
+            ->whereIn('ID', $templateIds)
+            ->get();
+
         if ($actionName == 'change_template_status') {
             $newStatus = sanitize_text_field($request->get('status', ''));
             if (!$newStatus) {
@@ -295,8 +329,6 @@ class TemplateController extends Controller
                     'message' => __('Please select status', 'fluent-crm')
                 ]);
             }
-
-            $templates = Template::whereIn('ID', $templateIds)->get();
 
             foreach ($templates as $template) {
                 $oldStatus = $template->post_status;
@@ -310,10 +342,15 @@ class TemplateController extends Controller
                 'message' => __('Status has been changed for the selected templates', 'fluent-crm')
             ];
         } else if ($actionName == 'delete_templates') {
-            $templates = Template::whereIn('id', $templateIds)->get();
+            // $defaultCampaignTemplateId = Helper::getDefaultCampaignTemplateId();
 
             foreach ($templates as $template) {
-                wp_delete_post($template->ID, true);
+                $deletedTemplate = wp_delete_post($template->ID, true);
+
+                // if ($deletedTemplate && $defaultCampaignTemplateId && absint($template->ID) === $defaultCampaignTemplateId) {
+                //     Helper::clearDefaultCampaignTemplateId();
+                //     $defaultCampaignTemplateId = 0;
+                // }
             }
 
             return $this->sendSuccess([
@@ -330,7 +367,11 @@ class TemplateController extends Controller
     {
         $template = Template::findOrFail($id);
 
-        wp_delete_post($template->ID, true);
+        $deletedTemplate = wp_delete_post($template->ID, true);
+
+        // if ($deletedTemplate && Helper::getDefaultCampaignTemplateId() === absint($template->ID)) {
+        //     Helper::clearDefaultCampaignTemplateId();
+        // }
 
         return $this->sendSuccess([
             'message' => __('The template has been deleted successfully.', 'fluent-crm')
@@ -358,6 +399,48 @@ class TemplateController extends Controller
     {
         return $this->sendSuccess([
             'smartcodes' => $this->smartCodes()
+        ]);
+    }
+
+    public function getDefaultCampaignTemplate()
+    {
+        $template = Helper::getDefaultCampaignTemplate();
+
+        return $this->sendSuccess([
+            'template_id' => $template ? absint($template->ID) : 0,
+            'template'    => $template ? [
+                'ID'              => absint($template->ID),
+                'post_title'      => $template->post_title,
+                'post_status'     => $template->post_status,
+                'design_template' => get_post_meta($template->ID, '_design_template', true)
+            ] : null
+        ]);
+    }
+
+    public function setDefaultCampaignTemplate()
+    {
+        $templateId = absint($this->request->get('template_id'));
+        $template = Helper::setDefaultCampaignTemplateId($templateId);
+
+        if (!$template) {
+            return $this->sendError([
+                'message' => __('Template not found', 'fluent-crm')
+            ], 404);
+        }
+
+        return $this->sendSuccess([
+            'message'     => __('Default campaign template has been saved', 'fluent-crm'),
+            'template_id' => absint($template->ID)
+        ]);
+    }
+
+    public function deleteDefaultCampaignTemplate()
+    {
+        Helper::clearDefaultCampaignTemplateId();
+
+        return $this->sendSuccess([
+            'message'     => __('Default campaign template has been removed', 'fluent-crm'),
+            'template_id' => 0
         ]);
     }
 
@@ -407,39 +490,11 @@ class TemplateController extends Controller
      */
     public function getBuiltInTemplate(Request $request)
     {
-        $fileUrl = esc_url_raw($request->get('file', ''));
+        $templateData = RemoteTemplateFetcher::fetch($request->get('file', ''));
 
-        if (!$fileUrl || !$this->isAllowedRemoteTemplateUrl($fileUrl)) {
+        if (is_wp_error($templateData)) {
             return $this->sendError([
-                'message' => __('Invalid template source URL', 'fluent-crm')
-            ]);
-        }
-
-        $response = wp_remote_get($fileUrl, [
-            'sslverify'           => true,
-            'timeout'             => 20,
-            'redirection'         => 0,
-            'limit_response_size' => 1024 * 1024
-        ]);
-
-        if (is_wp_error($response)) {
-            return $this->sendError([
-                'message' => __('Unable to download the selected template. Please try again.', 'fluent-crm')
-            ]);
-        }
-
-        $responseCode = wp_remote_retrieve_response_code($response);
-        if ($responseCode < 200 || $responseCode >= 300) {
-            return $this->sendError([
-                'message' => __('Unable to download the selected template. Please try again.', 'fluent-crm')
-            ]);
-        }
-
-        $templateData = Helper::parseArrayOrJson(wp_remote_retrieve_body($response));
-
-        if (Arr::get($templateData, 'is_fc_template') !== 'yes') {
-            return $this->sendError([
-                'message' => __('The selected file is not a valid FluentCRM template.', 'fluent-crm')
+                'message' => $templateData->get_error_message()
             ]);
         }
 
@@ -457,37 +512,6 @@ class TemplateController extends Controller
             'message'  => __('Template has been inserted', 'fluent-crm'),
             'template' => $template
         ]);
-    }
-
-    /**
-     * Restricts direct template downloads to trusted FluentCRM template hosts.
-     *
-     * @param string $url
-     * @return bool
-     */
-    protected function isAllowedRemoteTemplateUrl($url)
-    {
-        $parsedUrl = wp_parse_url($url);
-
-        if (empty($parsedUrl['scheme']) || empty($parsedUrl['host']) || $parsedUrl['scheme'] !== 'https') {
-            return false;
-        }
-
-        $allowedHosts = [
-            'fluentcrm.com',
-            'www.fluentcrm.com',
-            'wpmanageninja.com',
-            'www.wpmanageninja.com'
-        ];
-
-        if (defined('FC_TEMPLATE_API_DOMAIN')) {
-            $configuredHost = wp_parse_url(FC_TEMPLATE_API_DOMAIN, PHP_URL_HOST);
-            if ($configuredHost) {
-                $allowedHosts[] = strtolower($configuredHost);
-            }
-        }
-
-        return in_array(strtolower($parsedUrl['host']), array_unique($allowedHosts), true);
     }
 
     /**

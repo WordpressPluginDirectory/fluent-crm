@@ -21,8 +21,8 @@ class CompanyController extends Controller
     public function index(Request $request)
     {
         $order = [
-            'by'    => $request->getSafe('sort_by', 'sanitize_sql_orderby', 'id'),
-            'order' => $request->getSafe('sort_order', 'sanitize_sql_orderby', 'DESC')
+            'by'    => Helper::sanitizeOrderBy($request->get('sort_by'), 'id'),
+            'order' => Helper::sanitizeOrderBy($request->get('sort_order'), 'DESC')
         ];
 
         $companies = Company::orderBy($order['by'], $order['order'])
@@ -517,7 +517,19 @@ class CompanyController extends Controller
 
         $data = Sanitize::company($allData);
 
-        return Arr::only($data, array_keys($allData));
+        // Only allow real, user-editable company fields to be mass-assigned. System-managed
+        // columns (hash, meta, created_at, updated_at) are deliberately excluded so a client
+        // payload cannot overwrite them via createOrUpdate()->fill(). `id` is kept because
+        // createOrUpdate() uses it to locate the record on update (it is guarded, never filled),
+        // and `custom_values` is handled separately (merged into meta) by createOrUpdate().
+        $allowedFields = [
+            'id', 'name', 'owner_id', 'industry', 'type', 'email', 'phone',
+            'address_line_1', 'address_line_2', 'postal_code', 'city', 'state', 'country',
+            'timezone', 'employees_number', 'description', 'logo', 'website',
+            'linkedin_url', 'facebook_url', 'twitter_url', 'date_of_start', 'custom_values',
+        ];
+
+        return Arr::only($data, $allowedFields);
     }
 
     private function makeHttpUrl($url)
@@ -533,41 +545,6 @@ class CompanyController extends Controller
         return $url;
     }
 
-    /**
-     * Returns true only if the URL resolves to a public, routable IP address.
-     * Blocks private/reserved ranges to prevent SSRF attacks.
-     */
-    private function isSSRFSafeUrl($url)
-    {
-        $parsed = wp_parse_url($url);
-        if (!$parsed || empty($parsed['host'])) {
-            return false;
-        }
-
-        $scheme = strtolower($parsed['scheme'] ?? '');
-        if (!in_array($scheme, ['http', 'https'])) {
-            return false;
-        }
-
-        $host = $parsed['host'];
-        // Strip IPv6 brackets if present
-        $host = trim($host, '[]');
-
-        // If it looks like a raw IP, validate directly; otherwise resolve the hostname
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            $ip = $host;
-        } else {
-            $ip = gethostbyname($host);
-            // gethostbyname() returns the original string on failure
-            if ($ip === $host && !filter_var($ip, FILTER_VALIDATE_IP)) {
-                return false;
-            }
-        }
-
-        // Reject private, loopback, link-local, and other reserved ranges
-        return (bool) filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
-    }
-
     private function getLogoWebsiteUrl($url)
     {
         if (!$url) {
@@ -575,114 +552,95 @@ class CompanyController extends Controller
         }
 
         $url = $this->makeHttpUrl($url);
-
-        if (!$this->isSSRFSafeUrl($url)) {
+        $requestArgs = [
+            'sslverify'           => false,
+            'timeout'             => 5,
+            'redirection'         => 2,
+            'limit_response_size' => 1024 * 1024,
+            'user-agent'          => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        ];
+        $response = wp_safe_remote_get($url, $requestArgs);
+        if (is_wp_error($response) || !$this->isSuccessfulRemoteResponse($response)) {
             return NULL;
         }
 
-        $response = wp_remote_get($url, [
-            'sslverify'  => false, // Disable SSL verification to avoid 403 Forbidden error
-            'timeout'    => 10, // Set a timeout of 10 seconds
-            'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3' // Set a User-Agent header to avoid 403 Forbidden error
-        ]);
-
-        // Check for errors in the response
-        if (is_wp_error($response)) {
-            return NULL;
-        }
-
-        // Extract the HTML content from the response
         $html = wp_remote_retrieve_body($response);
+        if (!is_string($html) || strlen($html) > 1024 * 1024) {
+            return NULL;
+        }
 
         preg_match('/<link rel="apple-touch-icon"(?:.*?)href="([^"]+)"/i', $html, $matches);
-        // Use regular expressions to find the logo image URL
         if (!isset($matches[1])) {
             preg_match('/<link rel="(?:shortcut|icon)"(?:.*?)href="([^"]+)"/i', $html, $matches);
         }
+        if (empty($matches[1])) {
+            return NULL;
+        }
+        $logoUrl = \WP_Http::make_absolute_url(html_entity_decode($matches[1], ENT_QUOTES), $url);
 
-        // If a logo URL is found, download the image to the uploads directory
-        if (isset($matches[1])) {
-            $logoUrl = $matches[1];
-
-            // Resolve relative URLs against the base domain
-            if (!preg_match('/^https?:\/\//i', $logoUrl)) {
-                $parsedBase = wp_parse_url($url);
-                $baseOrigin = ($parsedBase['scheme'] ?? 'https') . '://' . ($parsedBase['host'] ?? '');
-                $logoUrl = $baseOrigin . '/' . ltrim($logoUrl, '/');
-            }
-
-            $extension = strtolower(substr($logoUrl, strrpos($logoUrl, '.') + 1));
-            if (!in_array($extension, ['png', 'jpg', 'jpeg', 'gif', 'ico'])) {
-                return NULL;
-            }
-
-            // Block SSRF on the logo URL too (the link tag href may point to a different host)
-            if (!$this->isSSRFSafeUrl($logoUrl)) {
-                return NULL;
-            }
-
-            $uploadDir = wp_upload_dir(); // Get the uploads directory
-
-            $filename = md5($url . time()) . '-' . basename($logoUrl); // Get the filename from the URL
-            $filepath = $uploadDir['basedir'] . '/fluentcrm/' . $filename; // Combine the uploads directory path with the filename
-
-            // Download the image using wp_remote_get() and save it to the uploads directory
-            $image = wp_remote_get($logoUrl, [
-                'timeout'   => 10, // Set a timeout of 10 seconds
-                'sslverify' => false // Disable SSL verification to avoid 403 Forbidden error
-            ]);
-
-            if (!is_wp_error($image)) {
-                // Check if the downloaded file is actually an image
-                $headers = wp_remote_retrieve_headers($image);
-                $imageBody = wp_remote_retrieve_body($image);
-                if (defined('FILEINFO_MIME_TYPE') && class_exists('\finfo')) {
-                    $finfo = new \finfo(FILEINFO_MIME_TYPE);
-                    $content_type = $finfo->buffer($imageBody);
-                } else {
-                    $content_type = wp_remote_retrieve_header($headers, 'content-type');
-                    if (!$content_type) {
-                        $content_type = Arr::get($headers, 'content-type');
-                    }
-
-                    if (strpos($content_type, 'image/') !== 0) {
-                        return null;
-                    }
-
-                    // Temporary file to validate the image
-                    $tmpFilePath = tempnam(sys_get_temp_dir(), 'tmpimg');
-                    file_put_contents($tmpFilePath, $imageBody);
-                    $imgSize = getimagesize($tmpFilePath);
-                    wp_delete_file($tmpFilePath);
-                    if (!$imgSize) {
-                        return null;
-                    }
-                }
-
-                if (strpos($content_type, 'image/') === 0) {
-                    global $wp_filesystem;
-                    if (!$wp_filesystem) {
-                        require_once(ABSPATH . '/wp-admin/includes/file.php');
-                        WP_Filesystem();
-                    }
-
-                    FileSystem::setCustomUploadDir([
-                        'baseurl' => $uploadDir['baseurl'],
-                        'basedir' => $uploadDir['basedir'],
-                    ]);
-
-                    $wp_filesystem->put_contents($filepath, $imageBody);
-                    // Return the URL of the saved image
-                    return $uploadDir['baseurl'] . FLUENTCRM_UPLOAD_DIR . '/' . $filename;
-                } else {
-                    // If the downloaded file is not an image, delete the file and return null
-                    wp_delete_file($filepath);
-                }
-            }
+        $image = wp_safe_remote_get($logoUrl, array_merge($requestArgs, [
+            'limit_response_size' => 5 * 1024 * 1024,
+        ]));
+        if (is_wp_error($image) || !$this->isSuccessfulRemoteResponse($image)) {
+            return NULL;
         }
 
-        // If no logo URL is found, or if an error occurs, or if the downloaded file is not an image, return null
-        return NULL;
+        $imageBody = wp_remote_retrieve_body($image);
+        if (!is_string($imageBody) || $imageBody === '' || strlen($imageBody) > 5 * 1024 * 1024) {
+            return NULL;
+        }
+
+        $imageInfo = @getimagesizefromstring($imageBody);
+        if (!$imageInfo || empty($imageInfo[2])) {
+            return NULL;
+        }
+
+        $extensions = [
+            IMAGETYPE_GIF  => 'gif',
+            IMAGETYPE_JPEG => 'jpg',
+            IMAGETYPE_PNG  => 'png',
+        ];
+        if (defined('IMAGETYPE_ICO')) {
+            $extensions[IMAGETYPE_ICO] = 'ico';
+        }
+        $extension = Arr::get($extensions, $imageInfo[2]);
+        if (!$extension) {
+            return NULL;
+        }
+
+        $uploadDir = wp_upload_dir();
+        if (!empty($uploadDir['error'])) {
+            return NULL;
+        }
+
+        FileSystem::setCustomUploadDir([
+            'baseurl' => $uploadDir['baseurl'],
+            'basedir' => $uploadDir['basedir'],
+        ]);
+
+        global $wp_filesystem;
+        if (!$wp_filesystem) {
+            require_once(ABSPATH . '/wp-admin/includes/file.php');
+            WP_Filesystem();
+        }
+        if (!$wp_filesystem) {
+            return NULL;
+        }
+
+        $filename = 'company-logo-' . strtolower(wp_generate_uuid4()) . '.' . $extension;
+        $filepath = $uploadDir['basedir'] . FLUENTCRM_UPLOAD_DIR . '/' . $filename;
+        if (!$wp_filesystem->put_contents($filepath, $imageBody)) {
+            wp_delete_file($filepath);
+            return NULL;
+        }
+
+        return $uploadDir['baseurl'] . FLUENTCRM_UPLOAD_DIR . '/' . $filename;
+    }
+
+    private function isSuccessfulRemoteResponse(array $response)
+    {
+        $responseCode = wp_remote_retrieve_response_code($response);
+        return $responseCode >= 200 && $responseCode < 300;
     }
 
     public function getNotes()
@@ -745,6 +703,12 @@ class CompanyController extends Controller
 
         $note = Sanitize::contactNote($note);
 
+        // Only persist server-trusted fields on this endpoint (mirrors updateNote): authorship
+        // is always the current user, and note metadata like parent_id/status is not
+        // client-settable here. Prevents forging note authorship / re-threading via the payload.
+        $note = Arr::only($note, ['subscriber_id', 'title', 'description', 'type', 'created_at']);
+        $note['created_by'] = get_current_user_id();
+
         $subscriberNote = CompanyNote::create(wp_unslash($note));
 
         /**
@@ -782,7 +746,11 @@ class CompanyController extends Controller
 
         $note = Sanitize::contactNote($note);
 
-        $companyNote = CompanyNote::findOrFail($noteId);
+        // Scope the note to this company so a note belonging to another company cannot be
+        // edited by pairing its id with a different (accessible) company route id.
+        $companyNote = CompanyNote::where('id', $noteId)
+            ->where('subscriber_id', $company->id)
+            ->firstOrFail();
         $companyNote->fill($note);
         $companyNote->save();
 
@@ -805,16 +773,22 @@ class CompanyController extends Controller
     public function deleteNote($id, $noteId)
     {
         $company = Company::findOrFail($id);
-        CompanyNote::where('id', $noteId)->delete();
+        // Scope the delete to this company so a note belonging to another company cannot be
+        // deleted by pairing its id with a different (accessible) company route id.
+        $deleted = CompanyNote::where('id', $noteId)
+            ->where('subscriber_id', $company->id)
+            ->delete();
 
-        /**
-         * Subscriber's Note Delete
-         *
-         * @param int $noteId Note ID.
-         * @param Company $company Company Model.
-         * @since 1.0
-         */
-        do_action('fluent_crm/company_note_deleted', $noteId, $company);
+        if ($deleted) {
+            /**
+             * Subscriber's Note Delete
+             *
+             * @param int $noteId Note ID.
+             * @param Company $company Company Model.
+             * @since 1.0
+             */
+            do_action('fluent_crm/company_note_deleted', $noteId, $company);
+        }
 
         return $this->sendSuccess([
             'message' => __('Note successfully deleted', 'fluent-crm')
@@ -900,6 +874,20 @@ class CompanyController extends Controller
         $company = Company::findOrFail($companyId);
         $sectionId = $request->get('section_provider');
 
+        /**
+         * Filter the company profile section content for a specific section ID.
+         *
+         * The dynamic portion of the hook name, `$sectionId`, refers to the section provider.
+         *
+         * Security: `content_html` is rendered as raw HTML in the admin UI (Vue v-html)
+         * without client-side sanitization. Producers hooking this filter MUST escape any
+         * user-authored data (e.g. via esc_html() / wp_kses_post()) before returning it, to
+         * prevent stored XSS in the admin. Structural markup and intentional rich content
+         * (styles, iframes, scripts) are allowed by design.
+         *
+         * @param array  An array with `heading` and `content_html` keys.
+         * @param object $company The company object.
+         */
         return apply_filters('fluent_crm/company_profile_section_' . $sectionId, [
             'heading'      => '',
             'content_html' => ''
